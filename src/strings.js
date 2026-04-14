@@ -52,13 +52,17 @@ engine.lastIndexOf = function (coll, substr) {
 
 engine.substring = function (coll, start, length) {
   const str = misc.singleton(coll, 'String');
-  if (util.isEmpty(str) || util.isEmpty(start) || start < 0 || start >= str.length) {
+  if (util.isEmpty(str) || util.isEmpty(start)) {
+    return [];
+  }
+  start = +start; // Convert to number
+  if (start < 0 || start >= str.length) {
     return [];
   }
   if (length === undefined || util.isEmpty(length)) {
     return str.substring(start);
   }
-  return str.substring(start, start + length);
+  return str.substring(start, start + +length);
 };
 
 engine.startsWith = function (coll, prefix) {

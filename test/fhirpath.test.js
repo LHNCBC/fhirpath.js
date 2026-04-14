@@ -76,7 +76,7 @@ const generateTest = (test, testResource) => {
   let expressions = Array.isArray(test.expression) ? test.expression : [test.expression];
   const console_log = console.log;
 
-  const getTestData = (expression, done) => {
+  const getTestData = (expression, preciseMath, done) => {
     if (test.disableConsoleLog) {
       console.log = function() {};
     }
@@ -84,7 +84,7 @@ const generateTest = (test, testResource) => {
       let exception = null;
       let result = null;
       try {
-        result = calcExpression(expression, test, testResource);
+        result = calcExpression(expression, test, testResource, preciseMath);
       }
       catch (error) {
         exception = error;
@@ -122,16 +122,29 @@ const generateTest = (test, testResource) => {
   };
 
   expressions.forEach(expression => {
-    const expressionText = expression instanceof Object ? util.toJSON(expression) : expression;
-    const testName = ((test.desc ? test.desc + ': ' : '') + (expressionText|| ''))
-    switch(test.type) {
-    case 'skipped':
-      return it.skip(`Disabled test ${testName}`, () => {});
-    case 'focused':
-      return it.only(testName, (done) => getTestData(expression, done));
-    default:
-      return it(testName, (done) => getTestData(expression, done));
-    }
+    // Normalize `test.preciseMath` into an iterable list of execution modes.
+    // Supported YAML forms:
+    // - `undefined`  -> run once per default modes: `[false, true]`
+    // - `boolean`    -> run once with the provided mode: `[true]` or `[false]`
+    // - `boolean[]`  -> run once per listed mode (e.g. `[false, true]`)
+    // TODO: At some point, we will be able to reduce the number of tests by
+    //  changing the default value to `[false]`. But first, we need to set
+    //  `preciseMath: [false, true]` for the tests that truly require
+    //  double-checking.
+    ( test.preciseMath === undefined ? [false, true] :
+      (Array.isArray(test.preciseMath) ? test.preciseMath : [test.preciseMath]) )
+      .forEach( preciseMath => {
+        const expressionText = expression instanceof Object ? util.toJSON(expression) : expression;
+        const testName = ((test.desc ? test.desc + ': ' : '') + (expressionText|| '')) + (preciseMath ? ' <--preciseMath': '');
+        switch(test.type) {
+          case 'skipped':
+            return it.skip(`Disabled test ${testName}`, () => {});
+          case 'focused':
+            return it.only(testName, (done) => getTestData(expression, preciseMath, done));
+          default:
+            return it(testName, (done) => getTestData(expression, preciseMath, done));
+        }
+      });
   });
 };
 
