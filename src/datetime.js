@@ -239,6 +239,7 @@ engine.timezoneOffsetOf = function(coll) {
  *  Returns empty for Time values or empty collections.
  */
 engine.dateOf = function(coll) {
+  const ctx = this;
   const v = getSingletonDateTimeValue(coll, 'dateOf');
   if (!v) return [];
   if (v instanceof FP_Time) return [];
@@ -249,7 +250,7 @@ engine.dateOf = function(coll) {
   let dateStr = tp[0];
   if (tp.length > 1) dateStr += tp[1];
   if (tp.length > 2) dateStr += tp[2];
-  return [new FP_Date(dateStr)];
+  return [new FP_Date(ctx, dateStr)];
 };
 
 /**
@@ -258,6 +259,7 @@ engine.dateOf = function(coll) {
  *  Returns empty if there is no time component, or for Date or Time inputs.
  */
 engine.timeOf = function(coll) {
+  const ctx = this;
   const v = getSingletonDateTimeValue(coll, 'timeOf');
   if (!v) return [];
   // Only valid for DateTime — not Date-only (FP_Date) or Time (FP_Time)
@@ -269,7 +271,7 @@ engine.timeOf = function(coll) {
   if (tp.length > 4) timeStr += tp[4];
   if (tp.length > 5) timeStr += tp[5];
   if (tp.length > 6) timeStr += tp[6];
-  return [new FP_Time(timeStr)];
+  return [new FP_Time(ctx, timeStr)];
 };
 
 module.exports = engine;

@@ -118,10 +118,11 @@ engine.coalesce = function(data, ...exprs) {
 engine.sort = function(data, ...sortArgs) {
   if(data !== false && !data) { return []; }
 
+  const ctx = this;
   // If no sort arguments provided, use natural ordering
   if (sortArgs.length === 0) {
     return data.slice().sort((a, b) => {
-      return compareValues(util.valData(a), util.valData(b));
+      return compareValues(ctx, util.valData(a), util.valData(b));
     });
   }
 
@@ -160,7 +161,7 @@ engine.sort = function(data, ...sortArgs) {
       valB = valB !== null ? util.valData(valB) : null;
 
       // Compare values using FHIRPath comparison semantics
-      let comparison = compareValues(valA, valB);
+      let comparison = compareValues(ctx, valA, valB);
 
       // Apply direction
       if (direction === 'desc') {
@@ -184,7 +185,7 @@ engine.sort = function(data, ...sortArgs) {
  * Compare two values using FHIRPath comparison semantics
  * Reuses existing equality.js comparison logic
  */
-function compareValues(a, b) {
+function compareValues(ctx, a, b) {
   // Handle empty values - per spec: "An empty value is considered lower than all other values"
   if (a == null && b == null) return 0;
   if (a == null) return -1;  // Empty values sort before non-empty values
@@ -192,7 +193,7 @@ function compareValues(a, b) {
 
   // Use existing FHIRPath comparison logic from equality.js
   // Convert to singleton arrays for typecheck
-  const [a0, b0] = equality.typecheck([a], [b]);
+  const [a0, b0] = equality.typecheck(ctx,[a], [b]);
 
   // Handle FP_Type objects (dates, times, quantities, etc.)
   if (a0 instanceof FP_Type) {
