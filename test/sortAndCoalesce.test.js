@@ -1,8 +1,9 @@
 const fhirpath = require("../src/fhirpath");
 const r4_model = require("../fhir-context/r4");
 
+
 describe("sortAndCoalesce", () => {
-  
+
   // Test data setup
   const getPatientWithId = () => ({
     resourceType: "Patient",
@@ -33,8 +34,10 @@ describe("sortAndCoalesce", () => {
     ]
   });
 
+
   describe("coalesce function", () => {
-    it("coalesce with single parameter", () => {
+
+    it("should coalesce with single parameter", () => {
       const patient = getPatientWithId();
       const expr = "coalesce(id)";
       const result = fhirpath.evaluate(patient, expr, r4_model);
@@ -43,7 +46,8 @@ describe("sortAndCoalesce", () => {
       expect(result[0]).toBe("pat1");
     });
 
-    it("coalesce with two parameters", () => {
+
+    it("should coalesce with two parameters", () => {
       const patient = getPatientWithId();
       const expr = "coalesce(name, id)";
       const result = fhirpath.evaluate(patient, expr, r4_model);
@@ -52,7 +56,8 @@ describe("sortAndCoalesce", () => {
       expect(result[0]).toBe("pat1");
     });
 
-    it("coalesce with multiple parameters including empty collections", () => {
+
+    it("should coalesce with multiple parameters including empty collections", () => {
       const patient = getPatientWithId();
       const expr = "coalesce(name, telecom, {}, address, extension, 'five', id, birthDate)";
       const result = fhirpath.evaluate(patient, expr, r4_model);
@@ -60,10 +65,175 @@ describe("sortAndCoalesce", () => {
       expect(result).toHaveLength(1);
       expect(result[0]).toBe("five");
     });
+
+
+    it("should coalesce short-circuits later async arguments after first non-empty async result", async () => {
+      const callCounts = {
+        asyncFirst: 0,
+        asyncSecond: 0
+      };
+
+      const options = {
+        async: true,
+        userInvocationTable: {
+          asyncFirst: {
+            fn: () => {
+              callCounts.asyncFirst += 1;
+              return Promise.resolve(["first"]);
+            },
+            arity: {0: []}
+          },
+          asyncSecond: {
+            fn: () => {
+              callCounts.asyncSecond += 1;
+              return Promise.resolve(["second"]);
+            },
+            arity: {0: []}
+          }
+        }
+      };
+
+      const result = await fhirpath.evaluate({}, "coalesce(asyncFirst(), asyncSecond())", {}, r4_model, options);
+      expect(result).toEqual(["first"]);
+      expect(callCounts.asyncFirst).toBe(1);
+      expect(callCounts.asyncSecond).toBe(0);
+    });
+
+
+    it("should coalesce continues after empty async result and then short-circuits remaining async arguments", async () => {
+      const callCounts = {
+        asyncEmpty: 0,
+        asyncWinner: 0,
+        asyncNever: 0
+      };
+
+      const options = {
+        async: true,
+        userInvocationTable: {
+          asyncEmpty: {
+            fn: () => {
+              callCounts.asyncEmpty += 1;
+              return Promise.resolve([]);
+            },
+            arity: {0: []}
+          },
+          asyncWinner: {
+            fn: () => {
+              callCounts.asyncWinner += 1;
+              return Promise.resolve(["winner"]);
+            },
+            arity: {0: []}
+          },
+          asyncNever: {
+            fn: () => {
+              callCounts.asyncNever += 1;
+              return Promise.resolve(["never"]);
+            },
+            arity: {0: []}
+          }
+        }
+      };
+
+      const result = await fhirpath.evaluate(
+        {},
+        "coalesce(asyncEmpty(), asyncWinner(), asyncNever())",
+        {},
+        r4_model,
+        options
+      );
+      expect(result).toEqual(["winner"]);
+      expect(callCounts.asyncEmpty).toBe(1);
+      expect(callCounts.asyncWinner).toBe(1);
+      expect(callCounts.asyncNever).toBe(0);
+    });
+
+
+    it("should coalesce short-circuits async arguments when a prior sync argument is non-empty", () => {
+      const callCounts = {
+        syncWinner: 0,
+        asyncNever: 0
+      };
+
+      const options = {
+        async: true,
+        userInvocationTable: {
+          syncWinner: {
+            fn: () => {
+              callCounts.syncWinner += 1;
+              return ["winner"];
+            },
+            arity: {0: []}
+          },
+          asyncNever: {
+            fn: () => {
+              callCounts.asyncNever += 1;
+              return Promise.resolve(["never"]);
+            },
+            arity: {0: []}
+          }
+        }
+      };
+
+      const result = fhirpath.evaluate({}, "coalesce(syncWinner(), asyncNever())", {}, r4_model, options);
+      expect(result).toEqual(["winner"]);
+      expect(callCounts.syncWinner).toBe(1);
+      expect(callCounts.asyncNever).toBe(0);
+    });
+
+
+    it("should coalesce short-circuits remaining arguments after sync result that follows an empty async argument", async () => {
+      const callCounts = {
+        asyncEmpty: 0,
+        syncWinner: 0,
+        asyncNever: 0
+      };
+
+      const options = {
+        async: true,
+        userInvocationTable: {
+          asyncEmpty: {
+            fn: () => {
+              callCounts.asyncEmpty += 1;
+              return Promise.resolve([]);
+            },
+            arity: {0: []}
+          },
+          syncWinner: {
+            fn: () => {
+              callCounts.syncWinner += 1;
+              return ["winner"];
+            },
+            arity: {0: []}
+          },
+          asyncNever: {
+            fn: () => {
+              callCounts.asyncNever += 1;
+              return Promise.resolve(["never"]);
+            },
+            arity: {0: []}
+          }
+        }
+      };
+
+      const result = await fhirpath.evaluate(
+        {},
+        "coalesce(asyncEmpty(), syncWinner(), asyncNever())",
+        {},
+        r4_model,
+        options
+      );
+      expect(result).toEqual(["winner"]);
+      expect(callCounts.asyncEmpty).toBe(1);
+      expect(callCounts.syncWinner).toBe(1);
+      expect(callCounts.asyncNever).toBe(0);
+    });
+
   });
 
+
   describe("sort function", () => {
-    it("basic collection without sort", () => {
+
+    it("should basic collection without sort", () => {
       const expr = "(1|2|3)";
       const result = fhirpath.evaluate({}, expr, r4_model);
       
@@ -73,7 +243,8 @@ describe("sortAndCoalesce", () => {
       expect(result[2]).toBe(3);
     });
 
-    it("sort already ordered numbers", () => {
+
+    it("should sort already ordered numbers", () => {
       const expr = "(1|2|3).sort()";
       const result = fhirpath.evaluate({}, expr, r4_model);
       
@@ -83,7 +254,8 @@ describe("sortAndCoalesce", () => {
       expect(result[2]).toBe(3);
     });
 
-    it("sort unordered numbers", () => {
+
+    it("should sort unordered numbers", () => {
       const expr = "(3|2|1).sort()";
       const result = fhirpath.evaluate({}, expr, r4_model);
       
@@ -93,7 +265,8 @@ describe("sortAndCoalesce", () => {
       expect(result[2]).toBe(3);
     });
 
-    it("sort with explicit $this parameter", () => {
+
+    it("should sort with explicit $this parameter", () => {
       const expr = "(3|2|1).sort($this)";
       const result = fhirpath.evaluate({}, expr, r4_model);
       
@@ -103,7 +276,8 @@ describe("sortAndCoalesce", () => {
       expect(result[2]).toBe(3);
     });
 
-    it("sort descending numeric", () => {
+
+    it("should sort descending numeric", () => {
       const expr = "(1|2|3|10).sort($this desc)";
       const result = fhirpath.evaluate({}, expr, r4_model);
       
@@ -114,7 +288,8 @@ describe("sortAndCoalesce", () => {
       expect(result[3]).toBe(1);
     });
 
-    it("sort descending alphabetic", () => {
+
+    it("should sort descending alphabetic", () => {
       const expr = "('a'|'b'|'c').sort($this desc)";
       const result = fhirpath.evaluate({}, expr, r4_model);
       
@@ -124,7 +299,8 @@ describe("sortAndCoalesce", () => {
       expect(result[2]).toBe("a");
     });
 
-    it("sort ascending alphabetic", () => {
+
+    it("should sort ascending alphabetic", () => {
       const expr = "('b'|'a'|'c').sort($this asc)";
       const result = fhirpath.evaluate({}, expr, r4_model);
       
@@ -134,7 +310,8 @@ describe("sortAndCoalesce", () => {
       expect(result[2]).toBe("c");
     });
 
-    it("sort patient given names", () => {
+
+    it("should sort patient given names", () => {
       const patient = {
         resourceType: "Patient",
         id: "pat1",
@@ -153,7 +330,8 @@ describe("sortAndCoalesce", () => {
       expect(result[1]).toBe("Peter");
     });
 
-    it("sort patient names by family and first given name", () => {
+
+    it("should sort patient names by family and first given name", () => {
       const patient = getPatientWithNames();
       const expr = "Patient.name.sort(family, given.first()).id";
       const result = fhirpath.evaluate(patient, expr, r4_model);
@@ -164,7 +342,8 @@ describe("sortAndCoalesce", () => {
       expect(result[2]).toBe("1"); // Smith, Peter
     });
 
-    it("sort descending dates", () => {
+
+    it("should sort descending dates", () => {
       const expr = "(@2024|@2025|@2026).sort($this desc)";
       const result = fhirpath.evaluate({}, expr, r4_model);
       
@@ -174,7 +353,8 @@ describe("sortAndCoalesce", () => {
       expect(result[2]).toBe("2024");
     });
 
-    it("sort descending times", () => {
+
+    it("should sort descending times", () => {
       const expr = "(@T10:45|@T12:30|@T08:15|@T13:30).sort($this desc)";
       const result = fhirpath.evaluate({}, expr, r4_model);
       
@@ -184,5 +364,133 @@ describe("sortAndCoalesce", () => {
       expect(result[2]).toBe("10:45");
       expect(result[3]).toBe("08:15");
     });
+
+
+    it("should sort quantity ResourceNodes using converted quantity values", () => {
+      const obs = {
+        resourceType: "Observation",
+        component: [
+          {
+            id: "a",
+            valueQuantity: {
+              value: 1,
+              unit: "g",
+              system: "http://unitsofmeasure.org",
+              code: "g"
+            }
+          },
+          {
+            id: "b",
+            valueQuantity: {
+              value: 500,
+              unit: "mg",
+              system: "http://unitsofmeasure.org",
+              code: "mg"
+            }
+          }
+        ]
+      };
+
+      const result = fhirpath.evaluate(obs, "Observation.component.sort(valueQuantity).id", {}, r4_model);
+      expect(result).toEqual(["b", "a"]);
+    });
+
+
+    it("should sort throws when key expression returns more than one item", () => {
+      const patient = getPatientWithNames();
+      const evaluate = () => {
+        fhirpath.evaluate(patient, "Patient.name.sort(given).id", {}, r4_model);
+      };
+      expect(evaluate).toThrow("Sort expression must return singleton value");
+    });
+
+
+    it("should sort throws for incomparable values", () => {
+      const evaluate = () => {
+        fhirpath.evaluate({}, "(1 month | 30 'd').sort()", {}, r4_model);
+      };
+      expect(evaluate).toThrow("Cannot sort incomparable values");
+    });
+
+
+    it("should sort throws for non-primitive object values", () => {
+      const evaluate = () => {
+        fhirpath.evaluate({ values: [{ id: "a" }, { id: "b" }] }, "values.sort()", {}, r4_model);
+      };
+      expect(evaluate).toThrow("Cannot sort by non-primitive type: Object");
+    });
+
+
+    it("should sort throws when right side sort key is a boxed primitive", () => {
+      const options = {
+        userInvocationTable: {
+          boxedKey: {
+            fn: (inputs) => {
+              const n = Number(fhirpath.util.valData(inputs[0]));
+              return [n === 2 ? new Number(n) : n];
+            },
+            arity: {0: []},
+            internalStructures: true
+          }
+        }
+      };
+      const evaluate = () => {
+        fhirpath.evaluate({}, "(2|1).sort(boxedKey())", {}, r4_model, options);
+      };
+      expect(evaluate).toThrow("Cannot sort by non-primitive type: Number");
+    });
+
+
+    it("should sort supports async key expressions when async mode is enabled", async () => {
+      const options = {
+        async: true,
+        userInvocationTable: {
+          asyncIdentity: {
+            fn: (inputs) => Promise.resolve(inputs[0]),
+            arity: {0: []}
+          }
+        }
+      };
+      const result = await fhirpath.evaluate({}, "(3|2|1).sort(asyncIdentity())", {}, r4_model, options);
+      expect(result).toEqual([1, 2, 3]);
+    });
+
+
+    it("should sort async key expression errors are wrapped once", async () => {
+      const options = {
+        async: true,
+        userInvocationTable: {
+          asyncDup: {
+            fn: (inputs) => Promise.resolve([inputs[0], inputs[0]]),
+            arity: {0: []}
+          }
+        }
+      };
+      await expect(
+        fhirpath.evaluate({}, "(3|2|1).sort(asyncDup())", {}, r4_model, options)
+      ).rejects.toThrow("Sort expression evaluation error: Sort expression must return singleton value");
+      await expect(
+        fhirpath.evaluate({}, "(3|2|1).sort(asyncDup())", {}, r4_model, options)
+      ).rejects.not.toThrow("Sort expression evaluation error: Sort expression evaluation error:");
+    });
+
+
+    it("should sort reports async key expressions when async mode is disabled", () => {
+      const options = {
+        userInvocationTable: {
+          asyncIdentity: {
+            fn: (inputs) => Promise.resolve(inputs[0]),
+            arity: {0: []}
+          }
+        }
+      };
+      const evaluate = () => {
+        fhirpath.evaluate({}, "(3|2|1).sort(asyncIdentity())", {}, r4_model, options);
+      };
+      expect(evaluate).toThrow('The asynchronous function "sort" is not allowed.');
+    });
+
   });
+
+
 });

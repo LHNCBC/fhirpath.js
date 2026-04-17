@@ -72,16 +72,19 @@ engine.timeOfDay = function() {
 /**
  *  Returns the FP_DateTime or FP_Date value from a collection item,
  *  converting from ResourceNode if necessary.
- *  @param {*} item - a collection item
- *  @return {FP_DateTime|FP_Date|FP_Time|null}
+ *  @param {Object} ctx - the FHIRPath evaluation context.
+ *  @param {*} item - a collection item.
+ *  @returns {FP_DateTime|FP_Date|FP_Time|null} the parsed value, or null if
+ *   the input is not a supported temporal value.
  */
-function toDateTimeValue(item) {
+function toDateTimeValue(ctx, item) {
   let v = item instanceof ResourceNode ? item.convertData() : item;
   if (v instanceof FP_DateTime || v instanceof FP_Date || v instanceof FP_Time) {
     return v;
   }
   if (typeof v === 'string') {
-    return FP_DateTime.checkString(v) || FP_Date.checkString(v) || FP_Time.checkString(v);
+    return FP_DateTime.checkString(ctx, v) || FP_Date.checkString(ctx, v) ||
+      FP_Time.checkString(ctx, v);
   }
   return null;
 }
@@ -89,24 +92,29 @@ function toDateTimeValue(item) {
 /**
  *  Validates that coll is a singleton and returns the date/time value,
  *  or returns null if the collection is empty or the value is not a date/time.
- *  @param {Array} coll - input collection
- *  @param {string} fnName - function name for error messages
- *  @return {FP_DateTime|FP_Date|FP_Time|null}
+ *  @param {Object} ctx - the FHIRPath evaluation context.
+ *  @param {Array} coll - input collection.
+ *  @param {string} fnName - function name for error messages.
+ *  @returns {FP_DateTime|FP_Date|FP_Time|null} the value from the
+ *   singleton input, or null when no value is available.
  */
-function getSingletonDateTimeValue(coll, fnName) {
+function getSingletonDateTimeValue(ctx, coll, fnName) {
   if (coll.length === 0) return null;
   if (coll.length > 1) {
     util.raiseError('Expected singleton input', fnName);
   }
-  return toDateTimeValue(coll[0]);
+  return toDateTimeValue(ctx, coll[0]);
 }
 
 /**
  *  Implements FHIRPath yearOf().
  *  Returns the year component of a Date or DateTime value as an Integer.
+ *  @param {Array} coll - input collection
+ *  @return {number|[]} the year component, or an empty array.
  */
 engine.yearOf = function(coll) {
-  const v = getSingletonDateTimeValue(coll, 'yearOf');
+  const ctx = this;
+  const v = getSingletonDateTimeValue(ctx, coll, 'yearOf');
   if (v instanceof FP_Time || !v) return [];
   return parseInt(v._getTimeParts()[0]);
 };
@@ -115,9 +123,12 @@ engine.yearOf = function(coll) {
  *  Implements FHIRPath monthOf().
  *  Returns the month component of a Date or DateTime value as an Integer.
  *  If the value does not have month precision, returns empty.
+ *  @param {Array} coll - input collection.
+ *  @return {number|[]} the month component, or an empty array.
  */
 engine.monthOf = function(coll) {
-  const v = getSingletonDateTimeValue(coll, 'monthOf');
+  const ctx = this;
+  const v = getSingletonDateTimeValue(ctx, coll, 'monthOf');
   if (v instanceof FP_Time || !v) return [];
   if (v._getPrecision() < 1) return [];
   return parseInt(v._getTimeParts()[1].slice(1));
@@ -127,9 +138,12 @@ engine.monthOf = function(coll) {
  *  Implements FHIRPath dayOf().
  *  Returns the day component of a Date or DateTime value as an Integer.
  *  If the value does not have day precision, returns empty.
+ *  @param {Array} coll - input collection.
+ *  @return {number|[]} the day component, or an empty array.
  */
 engine.dayOf = function(coll) {
-  const v = getSingletonDateTimeValue(coll, 'dayOf');
+  const ctx = this;
+  const v = getSingletonDateTimeValue(ctx, coll, 'dayOf');
   if (v instanceof FP_Time || !v) return [];
   if (v._getPrecision() < 2) return [];
   return parseInt(v._getTimeParts()[2].slice(1));
@@ -140,9 +154,12 @@ engine.dayOf = function(coll) {
  *  Returns the hour component of a DateTime or Time value as an Integer.
  *  For DateTime, requires precision >= 3. For Time, requires precision >= 0.
  *  Not valid for Date values.
+ *  @param {Array} coll - input collection.
+ *  @return {number|[]} the hour component, or an empty array.
  */
 engine.hourOf = function(coll) {
-  const v = getSingletonDateTimeValue(coll, 'hourOf');
+  const ctx = this;
+  const v = getSingletonDateTimeValue(ctx, coll, 'hourOf');
   if (!v) return [];
   if (v instanceof FP_Time) {
     // Time always has at least hour precision
@@ -160,9 +177,12 @@ engine.hourOf = function(coll) {
  *  Returns the minute component of a DateTime or Time value as an Integer.
  *  For DateTime, requires precision >= 4. For Time, requires precision >= 1.
  *  Not valid for Date values.
+ *  @param {Array} coll - input collection.
+ *  @return {number|[]} the minute component, or an empty array.
  */
 engine.minuteOf = function(coll) {
-  const v = getSingletonDateTimeValue(coll, 'minuteOf');
+  const ctx = this;
+  const v = getSingletonDateTimeValue(ctx, coll, 'minuteOf');
   if (!v) return [];
   if (v instanceof FP_Time) {
     if (v._getPrecision() < 1) return [];
@@ -178,9 +198,12 @@ engine.minuteOf = function(coll) {
  *  Returns the second component of a DateTime or Time value as an Integer.
  *  For DateTime, requires precision >= 5. For Time, requires precision >= 2.
  *  Not valid for Date values.
+ *  @param {Array} coll - input collection.
+ *  @return {number|[]} the second component, or an empty array.
  */
 engine.secondOf = function(coll) {
-  const v = getSingletonDateTimeValue(coll, 'secondOf');
+  const ctx = this;
+  const v = getSingletonDateTimeValue(ctx, coll, 'secondOf');
   if (!v) return [];
   if (v instanceof FP_Time) {
     if (v._getPrecision() < 2) return [];
@@ -196,9 +219,12 @@ engine.secondOf = function(coll) {
  *  Returns the millisecond component of a DateTime or Time value as an Integer.
  *  Requires millisecond precision in the input value.
  *  Not valid for Date values.
+ *  @param {Array} coll - input collection.
+ *  @return {number|[]} the millisecond component, or an empty array.
  */
 engine.millisecondOf = function(coll) {
-  const v = getSingletonDateTimeValue(coll, 'millisecondOf');
+  const ctx = this;
+  const v = getSingletonDateTimeValue(ctx, coll, 'millisecondOf');
   if (!v) return [];
   if (v instanceof FP_Time) {
     const timeParts = v._getTimeParts();
@@ -216,9 +242,13 @@ engine.millisecondOf = function(coll) {
  *  Returns the timezone offset of a DateTime value as a decimal number of
  *  hours from UTC (e.g. -7.0, 8.75). Returns empty if no timezone is present,
  *  or if the input is not a DateTime.
+ *  @param {Array} coll - input collection.
+ *  @return {Array|[]} a single-element array containing the timezone offset in
+ *   hours, or an empty array.
  */
 engine.timezoneOffsetOf = function(coll) {
-  const v = getSingletonDateTimeValue(coll, 'timezoneOffsetOf');
+  const ctx = this;
+  const v = getSingletonDateTimeValue(ctx, coll, 'timezoneOffsetOf');
   if (!v) return [];
   // Only valid for DateTime — not Date-only (FP_Date) or Time (FP_Time).
   // FP_Date extends FP_DateTime, so check FP_Date before FP_DateTime.
@@ -237,10 +267,13 @@ engine.timezoneOffsetOf = function(coll) {
  *  Implements FHIRPath dateOf().
  *  Returns the date component of a Date or DateTime value as an FP_Date.
  *  Returns empty for Time values or empty collections.
+ *  @param {Array} coll - input collection.
+ *  @return {FP_Date|[]} a single-element array containing the date component,
+ *   or an empty array.
  */
 engine.dateOf = function(coll) {
   const ctx = this;
-  const v = getSingletonDateTimeValue(coll, 'dateOf');
+  const v = getSingletonDateTimeValue(ctx, coll, 'dateOf');
   if (!v) return [];
   if (v instanceof FP_Time) return [];
   // FP_Date is already a date-only value — return as-is
@@ -257,10 +290,13 @@ engine.dateOf = function(coll) {
  *  Implements FHIRPath timeOf().
  *  Returns the time component of a DateTime value as an FP_Time.
  *  Returns empty if there is no time component, or for Date or Time inputs.
+ *  @param {Array} coll - input collection.
+ *  @return {FP_Time|[]} a single-element array containing the time component,
+ *   or an empty array.
  */
 engine.timeOf = function(coll) {
   const ctx = this;
-  const v = getSingletonDateTimeValue(coll, 'timeOf');
+  const v = getSingletonDateTimeValue(ctx, coll, 'timeOf');
   if (!v) return [];
   // Only valid for DateTime — not Date-only (FP_Date) or Time (FP_Time)
   if (v instanceof FP_Time || v instanceof FP_Date) return [];

@@ -82,6 +82,17 @@ engine.selectMacro = function(data, expr) {
   }));
 };
 
+
+/**
+ * Implements the FHIRPath `coalesce(...)` function.
+ * Evaluates each expression in order and returns the first non-empty result.
+ * See https://build.fhir.org/ig/HL7/FHIRPath/#coalesce
+ * @param {Array} data - the input collection.
+ * @param {...Function} exprs - expressions to evaluate against the input.
+ * @returns {Array|Promise<Array>} the first non-empty result, or an empty
+ *   collection if all expressions are empty. Returns a Promise when expression
+ *   evaluation is asynchronous.
+ */
 engine.coalesce = function(data, ...exprs) {
   if(data !== false && ! data) { return []; }
 
@@ -115,6 +126,18 @@ engine.coalesce = function(data, ...exprs) {
   return [];
 };
 
+
+/**
+ * Implements the FHIRPath `sort(...)` function.
+ * Sorts the input collection using one or more sort expressions and optional
+ * sort directions.
+ * See https://build.fhir.org/ig/HL7/FHIRPath/#fn-sort
+ * @param {Array} data - the input collection.
+ * @param {...Object} sortArgs - sort argument descriptors with `expr` and
+ *   optional `direction` (`asc` or `desc`).
+ * @returns {Array|Promise<Array>} the sorted collection. Returns a Promise
+ *   when any sort expression evaluates asynchronously.
+ */
 engine.sort = function(data, ...sortArgs) {
   if(data !== false && !data) { return []; }
 
@@ -122,46 +145,54 @@ engine.sort = function(data, ...sortArgs) {
   // If no sort arguments provided, use natural ordering
   if (sortArgs.length === 0) {
     return data.slice().sort((a, b) => {
-      return compareValues(ctx, util.valData(a), util.valData(b));
+      return compareValues(ctx, a, b);
     });
   }
 
-  // Sort with expressions and directions
-  return data.slice().sort((a, b) => {
+  // Pre-compute sort keys once per item. This keeps the sync path fast and
+  // enables an async path when any key expression resolves asynchronously.
+  const decorated = data.map(item => {
+    const keys = sortArgs.map(sortArg =>
+      evaluateSortExpression(sortArg, item));
+    return { item, keys };
+  });
+
+  const hasAsyncKey = decorated.some(entry =>
+    entry.keys.some(key => key instanceof Promise));
+  if (!hasAsyncKey) {
+    return sortDecorated(ctx, decorated, sortArgs).map(entry => entry.item);
+  }
+
+  util.checkAllowAsync(ctx, 'sort');
+  return Promise.all(
+    decorated.map(entry => {
+      return Promise.all(entry.keys).then(keys => ({
+        item: entry.item,
+        keys
+      }));
+    })
+  ).then(resolved => {
+    return sortDecorated(ctx, resolved, sortArgs).map(entry => entry.item);
+  });
+};
+
+
+/**
+ * Sorts decorated entries using already-evaluated sort keys.
+ * @param {Object} ctx - current evaluation context.
+ * @param {Array<{item: *, keys: Array}>} decorated - items paired with sort
+ *   keys.
+ * @param {Array<Object>} sortArgs - sort argument descriptors.
+ * @returns {Array<{item: *, keys: Array}>} the sorted decorated entries.
+ */
+function sortDecorated(ctx, decorated, sortArgs) {
+  return decorated.sort((a, b) => {
     for (let i = 0; i < sortArgs.length; i++) {
       const sortArg = sortArgs[i];
       const direction = sortArg.direction || 'asc';
 
-      // Evaluate the sort expression for both items
-      const resultA = sortArg.expr([a]);
-      const resultB = sortArg.expr([b]);
-
-      // Enforce singleton requirement per specification
-      let valA, valB;
-      try {
-        if (resultA.length > 0) {
-          util.assertOnlyOne(resultA, 'Sort expression must return singleton value');
-          valA = resultA[0]; // Get the actual value after validation
-        } else {
-          valA = null;
-        }
-        if (resultB.length > 0) {
-          util.assertOnlyOne(resultB, 'Sort expression must return singleton value');
-          valB = resultB[0]; // Get the actual value after validation
-        } else {
-          valB = null;
-        }
-      } catch (error) {
-        // Re-throw with more context about sort expression requirements
-        throw new Error('Sort expression evaluation error: ' + error.message);
-      }
-
-      // Extract values for comparison
-      valA = valA !== null ? util.valData(valA) : null;
-      valB = valB !== null ? util.valData(valB) : null;
-
       // Compare values using FHIRPath comparison semantics
-      let comparison = compareValues(ctx, valA, valB);
+      let comparison = compareValues(ctx, a.keys[i], b.keys[i]);
 
       // Apply direction
       if (direction === 'desc') {
@@ -179,11 +210,99 @@ engine.sort = function(data, ...sortArgs) {
     // All sort keys were equal
     return 0;
   });
-};
+}
+
+
+/**
+ * Evaluates one sort expression for one collection item.
+ * @param {{expr: Function, direction?: string}} sortArg - sort argument
+ *   descriptor.
+ * @param {*} item - the item being sorted.
+ * @returns {*|Promise<*>} the extracted singleton sort key, or a Promise when
+ *   expression evaluation is asynchronous.
+ */
+function evaluateSortExpression(sortArg, item) {
+  let result;
+  try {
+    result = sortArg.expr([item]);
+  } catch (error) {
+    throw wrapSortExpressionError(error);
+  }
+
+  return result instanceof Promise
+    ? result.then(extractSortValue).catch(error => {
+      throw wrapSortExpressionError(error);
+    })
+    : extractSortValue(result);
+}
+
+
+/**
+ * Extracts a single sort key from a sort expression result collection.
+ * @param {Array} result - sort expression result.
+ * @returns {*} the singleton sort key, or null for an empty result.
+ */
+function extractSortValue(result) {
+  try {
+    if (result.length === 0) {
+      return null;
+    }
+    util.assertOnlyOne(result, 'Sort expression must return singleton value');
+    return result[0];
+  } catch (error) {
+    throw wrapSortExpressionError(error);
+  }
+}
+
+
+/**
+ * Represents a normalized error thrown when evaluating a `sort(...)`
+ * expression. This wraps any underlying exception so callers receive
+ * a consistent error type and message format.
+ */
+class SortExpressionError extends Error {
+  /**
+   * Creates a sort-expression error from any thrown value.
+   * @param {*} error - The original thrown value (Error instance or arbitrary
+   *  value).
+   */
+  constructor(error) {
+    super('Sort expression evaluation error: ' + getErrorMessage(error));
+    this.name = 'SortExpressionError';
+  }
+}
+
+
+/**
+ * Ensures an error is a `SortExpressionError`.
+ * If the input is already a `SortExpressionError`, it is returned unchanged;
+ * otherwise, it is wrapped in a new `SortExpressionError`.
+ * @param {*} error - The original thrown value to normalize.
+ * @returns {SortExpressionError} A normalized sort-expression error.
+ */
+function wrapSortExpressionError(error) {
+  return error instanceof SortExpressionError ? error :
+    new SortExpressionError(error);
+}
+
+
+
+/**
+ * Normalizes an unknown thrown value to a message string.
+ * @param {*} error - caught error value.
+ * @returns {string} the error message.
+ */
+function getErrorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
 
 /**
  * Compare two values using FHIRPath comparison semantics
  * Reuses existing equality.js comparison logic
+ * @param {Object} ctx - current evaluation context.
+ * @param {*} a - left-hand value.
+ * @param {*} b - right-hand value.
+ * @returns {number} comparison result (-1, 0, or 1).
  */
 function compareValues(ctx, a, b) {
   // Handle empty values - per spec: "An empty value is considered lower than all other values"
@@ -198,18 +317,24 @@ function compareValues(ctx, a, b) {
   // Handle FP_Type objects (dates, times, quantities, etc.)
   if (a0 instanceof FP_Type) {
     const compareResult = a0.compare(b0);
-    return compareResult === null ? 0 : compareResult;
+    if (compareResult === null) {
+      throw new Error('Cannot sort incomparable values');
+    }
+    return compareResult;
   }
 
   // Reject non-primitive types that can't be meaningfully compared
-  // Per spec: "Values that would result in comparison errors must be filtered prior to sorting"
+  // Per spec: "Values that would result in comparison errors must be filtered
+  //  prior to sorting"
   let type = typeof a0;
   if (type === 'object' || type === 'function') {
-    throw new Error('Cannot sort by non-primitive type: ' + (a0.constructor?.name || type));
+    throw new Error('Cannot sort by non-primitive type: ' +
+      (a0.constructor?.name || type));
   }
   type = typeof b0;
   if (type === 'object' || type === 'function') {
-    throw new Error('Cannot sort by non-primitive type: ' + (b0.constructor?.name || type));
+    throw new Error('Cannot sort by non-primitive type: ' +
+      (b0.constructor?.name || type));
   }
 
   // Standard JavaScript comparison for basic types
@@ -266,7 +391,7 @@ engine.repeatMacro = function(parentData, expr, state = { res: [], unique: {}, h
  * @param {Array<*>} state.res - result array.
  * @param {boolean} state.hasPrimitive - flag indicating if the result array has
  *  primitives.
- * @return {Array<*>}
+ * @returns {Array<*>} items that were not already present in the state.
  */
 function getNewItems(ctx, items, state) {
   let newItems;
