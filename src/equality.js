@@ -60,23 +60,28 @@ engine.unequival = function(a, b){
 
 
 /**
- *  Checks that the types of a and b are suitable for comparison in an
- *  inequality expression.
- * @param {Object} ctx - the FHIRPath evaluation context.
- * @param a the left side of the inequality expression (which should be an array of
- *  one value).
- * @param b the right side of the inequality expression (which should be an array of
- *  one value).
- * @return the singleton values of the arrays a, and b.  If one was an FP_Type
- *  and the other was convertible, they will be exchanged so that the FP_Type is
- *  returned first, and a boolean indicating whether they were exchanged will be
- *  returned as the third element of the array.
+ * Normalizes two scalar operands so they can be compared by FHIRPath
+ * inequality operators (`<`, `>`, `<=`, `>=`) and sort comparators.
+ *
+ * This function:
+ * 1. Resolves wrapped/internal values via `util.valDataConverted(...)`.
+ * 2. Validates comparability using FHIRPath-compatible type rules.
+ * 3. Handles implicit number <-> quantity comparison ordering by optionally
+ *    swapping operands so an `FP_Type` (e.g., `FP_Quantity`) is on the left.
+ *
+ * @param {Object} ctx - FHIRPath evaluation context (reserved for parity with
+ *  other comparison helpers; not currently used directly).
+ * @param {*} a - Left scalar operand (not a collection).
+ * @param {*} b - Right scalar operand (not a collection).
+ * @returns {[*, *, boolean]} A tuple:
+ *  - index 0: normalized left value
+ *  - index 1: normalized right value
+ *  - index 2: `true` if operands were exchanged, otherwise `false`
+ * @throws {Error} If operand types are not comparable under FHIRPath rules.
  */
-function typecheck(ctx, a, b){
-  util.assertOnlyOne(a, "Singleton was expected");
-  util.assertOnlyOne(b, "Singleton was expected");
-  a = util.valDataConverted(a[0]);
-  b = util.valDataConverted(b[0]);
+function typecheckScalars(ctx, a, b){
+  a = util.valDataConverted(a);
+  b = util.valDataConverted(b);
   let exchange;
   if (a != null && b != null) {
     // FP_Date, FP_Instant are extended from FP_DateTime and can be compared
@@ -99,6 +104,26 @@ function typecheck(ctx, a, b){
     }
   }
   return exchange ? [b, a, true] : [a, b, false];
+}
+
+
+/**
+ * Validates singleton collection operands and delegates to `typecheckScalars`.
+ *
+ * This wrapper is used by inequality operators where inputs are expected to be
+ * FHIRPath collections containing exactly one element each.
+ *
+ * @param {Object} ctx - FHIRPath evaluation context.
+ * @param {Array} a - Left operand collection; must contain exactly one item.
+ * @param {Array} b - Right operand collection; must contain exactly one item.
+ * @returns {[*, *, boolean]} Normalized/scalarized comparison tuple from
+ *  `typecheckScalars(...)`.
+ * @throws {Error} If either collection is not a singleton.
+ */
+function typecheck(ctx, a, b){
+  util.assertOnlyOne(a, "Singleton was expected");
+  util.assertOnlyOne(b, "Singleton was expected");
+  return typecheckScalars(ctx, a[0], b[0]);
 }
 
 
@@ -241,5 +266,6 @@ engine.comparable = function(a, b){
 };
 
 
+engine.typecheckScalars = typecheckScalars;
 engine.typecheck = typecheck;
 module.exports = engine;

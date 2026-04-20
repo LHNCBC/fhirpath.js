@@ -310,9 +310,9 @@ function compareValues(ctx, a, b) {
   if (a == null) return -1;  // Empty values sort before non-empty values
   if (b == null) return 1;
 
-  // Use existing FHIRPath comparison logic from equality.js
-  // Convert to singleton arrays for typecheck
-  const [a0, b0] = equality.typecheck(ctx,[a], [b]);
+  // Use existing FHIRPath comparison logic from equality.js.
+  // The scalar helper avoids per-compare singleton array allocations.
+  const [a0, b0] = equality.typecheckScalars(ctx, a, b);
 
   // Handle FP_Type objects (dates, times, quantities, etc.)
   if (a0 instanceof FP_Type) {
