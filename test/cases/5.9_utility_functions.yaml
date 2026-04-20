@@ -33,7 +33,11 @@ tests:
         - 'group: timeOfDay(): Time':
 
           - desc: '** should return the full time'
-            expression: timeOfDay().toString().length() = 12
+            # The length of the time string can be either 8 (hh:mm:ss) or
+            # 12 (hh:mm:ss.sss), depending on whether the milliseconds are zero.
+            expression: >-
+              timeOfDay().toString().length() = 8 or
+              timeOfDay().toString().length() = 12
             result:
               - true
 
