@@ -67,6 +67,15 @@ describe("sortAndCoalesce", () => {
     });
 
 
+    it("should coalesce with more than ten parameters", () => {
+      const expr =
+        "coalesce({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, 'x')";
+      const result = fhirpath.evaluate({}, expr, r4_model);
+
+      expect(result).toEqual(["x"]);
+    });
+
+
     it("should coalesce short-circuits later async arguments after first non-empty async result", async () => {
       const callCounts = {
         asyncFirst: 0,
@@ -308,6 +317,16 @@ describe("sortAndCoalesce", () => {
       expect(result[0]).toBe("a");
       expect(result[1]).toBe("b");
       expect(result[2]).toBe("c");
+    });
+
+
+    it("should sort with more than ten parameters", () => {
+      const expr =
+        "(3|2|1).sort({}, {}, {}, {}, {}, {}, " +
+        "{}, {}, {}, {}, $this)";
+      const result = fhirpath.evaluate({}, expr, r4_model);
+
+      expect(result).toEqual([1, 2, 3]);
     });
 
 

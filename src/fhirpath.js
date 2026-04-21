@@ -62,9 +62,12 @@ const Terminologies = require('./terminologies');
 const Factory = require('./factory');
 
 // * fn: handler
-// * arity: is index map with type signature
-//   if type is in array (like [Boolean]) - this means
-//   function accepts value of this type or empty value {}
+// * arity: map of params count to type signature (must be present for
+//   functions with params, even if they also use variadicArity)
+//   if type is in array (like [Boolean]) - this means function accepts
+//   value of this type or empty value {}
+// * variadicArity: optional fallback for variadic functions
+//   {min, type} means params count >= min and every param uses `type`
 // * nullable:  means propagate empty result, i.e. instead
 //   calling function if one of params is  empty return empty
 
@@ -87,8 +90,10 @@ engine.invocationTable = {
   where:        {fn: filtering.whereMacro, arity: {1: ["Expr"]}},
   extension:    {fn: filtering.extension, arity: {1: ["String"]}},
   select:       {fn: filtering.selectMacro, arity: {1: ["Expr"]}},
-  coalesce:     {fn: filtering.coalesce, arity: {1: ["ExprAtCurrent"], 2: ["ExprAtCurrent", "ExprAtCurrent"], 3: ["ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent"], 4: ["ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent"], 5: ["ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent"], 6: ["ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent"], 7: ["ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent"], 8: ["ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent"], 9: ["ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent"], 10: ["ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent", "ExprAtCurrent"]}},
-  sort:         {fn: filtering.sort, arity: {0: [], 1: ["SortArgument"], 2: ["SortArgument", "SortArgument"], 3: ["SortArgument", "SortArgument", "SortArgument"], 4: ["SortArgument", "SortArgument", "SortArgument", "SortArgument"], 5: ["SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument"], 6: ["SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument"], 7: ["SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument"], 8: ["SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument"], 9: ["SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument"], 10: ["SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument", "SortArgument"]}},
+  coalesce:     {fn: filtering.coalesce, arity: {1: ["ExprAtCurrent"]},
+    variadicArity: {min: 1, type: "ExprAtCurrent"}},
+  sort:         {fn: filtering.sort, arity: {0: []},
+    variadicArity: {min: 0, type: "SortArgument"}},
   aggregate:    {fn: aggregate.aggregateMacro, arity: {1: ["Expr"], 2: ["Expr", "AnyAtRoot"]}},
   sum:          {fn: aggregate.sumFn},
   min:          {fn: aggregate.minFn},
@@ -738,6 +743,18 @@ function makeParam(ctx, parentData, type, param) {
     misc.singleton(res, type);
 }
 
+
+/**
+ * Invokes a FHIRPath function/operator from user or built-in invocation tables.
+ * Resolves parameters according to arity/type metadata and supports sync/async
+ * execution paths.
+ * @param {Object} ctx - Evaluation context.
+ * @param {string} fnName - Function/operator name to invoke.
+ * @param {Array} data - Current input collection passed as first argument.
+ * @param {Array|null} rawParams - Unevaluated AST parameter nodes.
+ * @returns {Array|Promise<Array>} Invocation result as an array, or a Promise
+ *   resolving to an array when any parameter/function execution is async.
+ */
 function doInvoke(ctx, fnName, data, rawParams){
   var invoc =
     ctx.userInvocationTable
@@ -756,7 +773,7 @@ function doInvoke(ctx, fnName, data, rawParams){
       }
     } else {
       var paramsNumber = rawParams ? rawParams.length : 0;
-      var argTypes = invoc.arity[paramsNumber];
+      var argTypes = getArgTypesForInvocation(invoc, paramsNumber);
       if(argTypes){
         var params = [];
         for(var i = 0; i < paramsNumber; i++){
@@ -787,6 +804,34 @@ function doInvoke(ctx, fnName, data, rawParams){
     throw new Error("Not implemented: " + fnName);
   }
 }
+
+
+/**
+ * Resolves argument type signatures for a function invocation by arity.
+ * Checks exact arity first, then falls back to variadicArity when present.
+ * @param {Object} invoc - Invocation descriptor from invocationTable.
+ * @param {number} paramsNumber - Number of parameters in the invocation.
+ * @returns {Array|null} Type signature for the given arity, or null if invalid.
+ */
+function getArgTypesForInvocation(invoc, paramsNumber) {
+  const argTypes = invoc.arity[paramsNumber];
+  if (argTypes) {
+    return argTypes;
+  }
+
+  if (!invoc.variadicArity) {
+    return null;
+  }
+
+  const min = invoc.variadicArity.min || 0;
+  if (paramsNumber < min) {
+    return null;
+  }
+
+  return Array(paramsNumber).fill(invoc.variadicArity.type);
+}
+
+
 function isNullable(x) {
   return x === null || x === undefined || util.isEmpty(x);
 }
