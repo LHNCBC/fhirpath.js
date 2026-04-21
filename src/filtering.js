@@ -149,72 +149,194 @@ engine.sort = function(data, ...sortArgs) {
     });
   }
 
-  // Pre-compute sort keys once per item. This keeps the sync path fast and
-  // enables an async path when any key expression resolves asynchronously.
-  const decorated = new Array(data.length);
-  let hasAsyncKey = false;
-  for (let i = 0; i < data.length; i++) {
-    const item = data[i];
-    const keys = new Array(sortArgs.length);
-    for (let j = 0; j < sortArgs.length; j++) {
-      const key = evaluateSortExpression(sortArgs[j], item);
-      if (!hasAsyncKey && key instanceof Promise) {
-        hasAsyncKey = true;
-      }
-      keys[j] = key;
-    }
-    decorated[i] = { item, keys };
-  }
-  if (!hasAsyncKey) {
-    return sortDecorated(ctx, decorated, sortArgs).map(entry => entry.item);
-  }
-
-  return Promise.all(
-    decorated.map(entry => {
-      return Promise.all(entry.keys).then(keys => ({
-        item: entry.item,
-        keys
-      }));
-    })
-  ).then(resolved => {
-    return sortDecorated(ctx, resolved, sortArgs).map(entry => entry.item);
-  });
+  const decorated = data.map(item => ({
+    item,
+    keys: new Array(sortArgs.length),
+    keyPromises: new Array(sortArgs.length),
+    keyReady: new Array(sortArgs.length).fill(false)
+  }));
+  const sorted = sortDecoratedByArg(ctx, decorated, sortArgs, 0);
+  return sorted instanceof Promise ?
+    sorted.then(entries => entries.map(entry => entry.item)) :
+    sorted.map(entry => entry.item);
 };
 
 
 /**
- * Sorts decorated entries using already-evaluated sort keys.
+ * Sorts decorated entries by one sort argument and recurses only into tie
+ * groups for later sort arguments.
  * @param {Object} ctx - current evaluation context.
- * @param {Array<{item: *, keys: Array}>} decorated - items paired with sort
+ * @param {Array<Object>} decorated - items paired with lazily-evaluated sort
  *   keys.
  * @param {Array<Object>} sortArgs - sort argument descriptors.
- * @returns {Array<{item: *, keys: Array}>} the sorted decorated entries.
+ * @param {number} argIndex - index of the current sort argument.
+ * @returns {Array<Object>|Promise<Array<Object>>} sorted decorated entries.
  */
-function sortDecorated(ctx, decorated, sortArgs) {
-  return decorated.sort((a, b) => {
-    for (let i = 0; i < sortArgs.length; i++) {
-      const sortArg = sortArgs[i];
-      const direction = sortArg.direction || 'asc';
+function sortDecoratedByArg(ctx, decorated, sortArgs, argIndex) {
+  if (decorated.length < 2 || argIndex >= sortArgs.length) {
+    return decorated;
+  }
 
-      // Compare values using FHIRPath comparison semantics
-      let comparison = compareValues(ctx, a.keys[i], b.keys[i]);
+  const sortArg = sortArgs[argIndex];
+  const keyPrep = ensureKeysForArg(decorated, sortArg, argIndex);
+  if (keyPrep instanceof Promise) {
+    return keyPrep.then(() => {
+      return sortDecoratedByPreparedArg(ctx, decorated, sortArgs, argIndex);
+    });
+  }
+  return sortDecoratedByPreparedArg(ctx, decorated, sortArgs, argIndex);
+}
 
-      // Apply direction
-      if (direction === 'desc') {
-        comparison = -comparison;
-      }
 
-      // If this sort key produces a difference, return it
-      if (comparison !== 0) {
-        return comparison;
-      }
-
-      // Otherwise, continue to the next sort key
+/**
+ * Ensures keys for one sort argument are evaluated for all entries.
+ * @param {Array<Object>} decorated - entries being sorted.
+ * @param {{expr: Function}} sortArg - current sort argument descriptor.
+ * @param {number} argIndex - index of the current sort argument.
+ * @returns {void|Promise<void>} Promise when any key is asynchronous.
+ */
+function ensureKeysForArg(decorated, sortArg, argIndex) {
+  let pending;
+  for (let i = 0; i < decorated.length; i++) {
+    const key = getSortKey(decorated[i], sortArg, argIndex);
+    if (key instanceof Promise) {
+      pending ||= [];
+      pending.push(key);
     }
+  }
+  return pending ? Promise.all(pending).then(() => {}) : undefined;
+}
 
-    // All sort keys were equal
-    return 0;
+
+/**
+ * Gets one cached sort key, evaluating it lazily if needed.
+ * @param {Object} entry - decorated item entry.
+ * @param {{expr: Function}} sortArg - current sort argument descriptor.
+ * @param {number} argIndex - index of the current sort argument.
+ * @returns {*|Promise<*>} the singleton sort key.
+ */
+function getSortKey(entry, sortArg, argIndex) {
+  if (entry.keyReady[argIndex]) {
+    return entry.keys[argIndex];
+  }
+  if (entry.keyPromises[argIndex]) {
+    return entry.keyPromises[argIndex];
+  }
+
+  const key = evaluateSortExpression(sortArg, entry.item);
+  if (key instanceof Promise) {
+    entry.keyPromises[argIndex] = key.then(resolvedKey => {
+      entry.keys[argIndex] = resolvedKey;
+      entry.keyReady[argIndex] = true;
+      return resolvedKey;
+    });
+    return entry.keyPromises[argIndex];
+  }
+
+  entry.keys[argIndex] = key;
+  entry.keyReady[argIndex] = true;
+  return key;
+}
+
+
+/**
+ * Sorts by the already-prepared key for one argument and recurses into ties.
+ * @param {Object} ctx - current evaluation context.
+ * @param {Array<Object>} decorated - entries being sorted.
+ * @param {Array<Object>} sortArgs - sort argument descriptors.
+ * @param {number} argIndex - index of the current sort argument.
+ * @returns {Array<Object>|Promise<Array<Object>>} sorted decorated entries.
+ */
+function sortDecoratedByPreparedArg(ctx, decorated, sortArgs, argIndex) {
+  const direction = sortArgs[argIndex].direction || 'asc';
+  decorated.sort((a, b) => {
+    let comparison = compareValues(ctx, a.keys[argIndex], b.keys[argIndex]);
+    if (direction === 'desc') {
+      comparison = -comparison;
+    }
+    return comparison;
   });
+
+  const nextArgIndex = argIndex + 1;
+  if (nextArgIndex >= sortArgs.length || decorated.length < 2) {
+    return decorated;
+  }
+
+  if (!hasEqualKeyNeighbors(ctx, decorated, argIndex)) {
+    return decorated;
+  }
+
+  const groups = splitEqualKeyGroups(ctx, decorated, argIndex);
+  let hasAsync = false;
+  const sortedGroups = groups.map(group => {
+    if (group.length < 2) {
+      return group;
+    }
+    const sortedGroup = sortDecoratedByArg(ctx, group, sortArgs, nextArgIndex);
+    if (sortedGroup instanceof Promise) {
+      hasAsync = true;
+    }
+    return sortedGroup;
+  });
+
+  if (!hasAsync) {
+    return flattenGroups(sortedGroups);
+  }
+  return Promise.all(sortedGroups).then(flattenGroups);
+}
+
+
+/**
+ * Checks if a sorted array has at least one adjacent pair with equal keys.
+ * @param {Object} ctx - current evaluation context.
+ * @param {Array<Object>} decorated - entries sorted by current key.
+ * @param {number} argIndex - current sort argument index.
+ * @returns {boolean} true when there is at least one tie group.
+ */
+function hasEqualKeyNeighbors(ctx, decorated, argIndex) {
+  for (let i = 1; i < decorated.length; i++) {
+    if (compareValues(ctx, decorated[i - 1].keys[argIndex],
+      decorated[i].keys[argIndex]) === 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+
+/**
+ * Splits sorted entries into contiguous groups with equal key values.
+ * @param {Object} ctx - current evaluation context.
+ * @param {Array<Object>} decorated - entries sorted by current key.
+ * @param {number} argIndex - current sort argument index.
+ * @returns {Array<Array<Object>>} groups of equal-key entries.
+ */
+function splitEqualKeyGroups(ctx, decorated, argIndex) {
+  const groups = [];
+  let groupStart = 0;
+  for (let i = 1; i <= decorated.length; i++) {
+    if (i === decorated.length ||
+      compareValues(ctx, decorated[i - 1].keys[argIndex],
+        decorated[i].keys[argIndex]) !== 0) {
+      groups.push(decorated.slice(groupStart, i));
+      groupStart = i;
+    }
+  }
+  return groups;
+}
+
+
+/**
+ * Flattens grouped decorated entries into a single array.
+ * @param {Array<Array<Object>>} groups - grouped decorated entries.
+ * @returns {Array<Object>} flattened entries.
+ */
+function flattenGroups(groups) {
+  const flattened = [];
+  for (let i = 0; i < groups.length; i++) {
+    flattened.push.apply(flattened, groups[i]);
+  }
+  return flattened;
 }
 
 

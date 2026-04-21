@@ -330,6 +330,42 @@ describe("sortAndCoalesce", () => {
     });
 
 
+    it("should sort without evaluating later selectors when primary key is sufficient", () => {
+      const expr = "(3|2|1).sort($this, iif($this = 2, (1|2), 0))";
+      const result = fhirpath.evaluate({}, expr, r4_model);
+
+      expect(result).toEqual([1, 2, 3]);
+    });
+
+
+    it("should sort skips later selector function calls for unique primary keys", () => {
+      const callCounts = {
+        neverCalled: 0
+      };
+      const options = {
+        userInvocationTable: {
+          neverCalled: {
+            fn: () => {
+              callCounts.neverCalled += 1;
+              return [0];
+            },
+            arity: {0: []}
+          }
+        }
+      };
+
+      const result = fhirpath.evaluate(
+        {},
+        "(3|2|1).sort($this, neverCalled())",
+        {},
+        r4_model,
+        options
+      );
+      expect(result).toEqual([1, 2, 3]);
+      expect(callCounts.neverCalled).toBe(0);
+    });
+
+
     it("should sort patient given names", () => {
       const patient = {
         resourceType: "Patient",
