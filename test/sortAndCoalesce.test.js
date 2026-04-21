@@ -338,6 +338,15 @@ describe("sortAndCoalesce", () => {
     });
 
 
+    it("should not inherit outer $index in nested sort selector scope", () => {
+      const expr =
+        "(1).select((3|2|1).sort(iif($index = 0, (1|2), 0)))";
+      const result = fhirpath.evaluate({}, expr, r4_model);
+
+      expect(result).toEqual([3, 2, 1]);
+    });
+
+
     it("should sort skips later selector function calls for unique primary keys", () => {
       const callCounts = {
         neverCalled: 0

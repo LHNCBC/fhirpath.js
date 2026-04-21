@@ -713,6 +713,8 @@ function makeParam(ctx, parentData, type, param) {
         if (ctx.definedVars) {
           ctxExpr.definedVars = {...ctx.definedVars};
         }
+        // sort key selectors do not create an indexed iteration scope
+        ctxExpr.$index = undefined;
         // Set up $this context for sort expression
         ctxExpr.$this = data;
         return engine.doEval(ctxExpr, util.arraify(data), sortArg.expr);
