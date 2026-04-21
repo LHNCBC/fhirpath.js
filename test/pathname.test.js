@@ -1,5 +1,6 @@
 const fhirpath = require("../src/fhirpath");
 const fhirpath_r4_model = require("../fhir-context/r4");
+const {mockRestore, mockFetchResults} = require("./mock-fetch-results");
 
 const testPatient = {
   resourceType: "Patient",
@@ -96,6 +97,10 @@ const testQuestionnaireResponse = {
 
 
 describe("pathname()", () => {
+  afterEach(() => {
+    mockRestore();
+  });
+
   describe("basic pathname without short parameter", () => {
     test("returns path for a simple property", () => {
       const result = fhirpath.evaluate(
@@ -368,6 +373,70 @@ describe("pathname()", () => {
         { resolveInternalTypes: false }
       );
       expect(typeof result[0]).toBe("string");
+    });
+  });
+
+  describe("resolve() provenance filtering", () => {
+    test("excludes items resolved outside the input resource", (done) => {
+      const inputObservation = {
+        resourceType: "Observation",
+        id: "obs-resolve-1",
+        subject: { reference: "Patient/p1" }
+      };
+      const externalPatient = {
+        resourceType: "Patient",
+        id: "p1"
+      };
+      mockFetchResults([
+        ["Patient/p1", externalPatient]
+      ]);
+
+      const result = fhirpath.evaluate(
+        inputObservation,
+        "Observation.subject.resolve().id.pathname()",
+        {},
+        fhirpath_r4_model,
+        {
+          async: true,
+          fhirServerUrl: "https://example-fhir-server",
+          resolveInternalTypes: false
+        }
+      );
+      expect(result instanceof Promise).toBe(true);
+      result.then((r) => {
+        expect(r).toEqual([]);
+        done();
+      });
+    });
+
+    test("includes contained resources resolved from the input resource", (done) => {
+      const inputObservation = {
+        resourceType: "Observation",
+        id: "obs-resolve-2",
+        subject: { reference: "#pat-1" },
+        contained: [
+          {
+            resourceType: "Patient",
+            id: "pat-1"
+          }
+        ]
+      };
+
+      const result = fhirpath.evaluate(
+        inputObservation,
+        "Observation.subject.resolve().id.pathname()",
+        {},
+        fhirpath_r4_model,
+        {
+          async: true,
+          resolveInternalTypes: false
+        }
+      );
+      expect(result instanceof Promise).toBe(true);
+      result.then((r) => {
+        expect(r).toEqual(["Observation.contained[0].id[0]"]);
+        done();
+      });
     });
   });
 });

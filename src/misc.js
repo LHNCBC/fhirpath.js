@@ -860,6 +860,42 @@ function buildPathname(node, short) {
   return segments.join('.');
 }
 
+
+/**
+ * Returns true when a ResourceNode belongs to the current input resource.
+ *
+ * @param {ResourceNode} node - a node from pathname() input collection.
+ * @param {Array} dataRoot - root collection from evaluation context.
+ * @return {boolean}
+ */
+function isNodeInInputResource(node, dataRoot) {
+  if (!Array.isArray(dataRoot) || dataRoot.length === 0) {
+    return true;
+  }
+
+  let root = node;
+  while (root?.parentResNode) {
+    root = root.parentResNode;
+  }
+
+  for (let i = 0; i < dataRoot.length; i++) {
+    const item = dataRoot[i];
+    if (item === root) {
+      return true;
+    }
+    if (
+      item instanceof ResourceNode &&
+      item.data != null &&
+      root?.data != null &&
+      item.data === root.data
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /**
  * Implementation of the pathname() function.
  * Returns the path of each item in the input collection within the input
@@ -867,7 +903,9 @@ function buildPathname(node, short) {
  *
  * Items derived from computation (not ResourceNode instances) are excluded
  * from the result. Items outside the input resource (navigated via resolve())
- * are also excluded.
+ * are also excluded, however, if resolve() references a resource contained
+ * within the input Resource, then it is included (such as with FHIR bundles,
+ * or contained resources).
  *
  * @param {Array} coll - the input collection
  * @param {boolean} [short] - when true, excludes array indexers for elements
@@ -876,10 +914,11 @@ function buildPathname(node, short) {
  */
 engine.pathnameFn = function(coll, short) {
   const result = [];
+  const dataRoot = this?.dataRoot;
   for (let i = 0; i < coll.length; i++) {
     const item = coll[i];
     // Only include ResourceNode instances — computed values are excluded
-    if (item instanceof ResourceNode) {
+    if (item instanceof ResourceNode && isNodeInInputResource(item, dataRoot)) {
       result.push(buildPathname(item, short));
     }
   }
