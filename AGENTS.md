@@ -32,6 +32,9 @@
 - Async operations (`resolve`, `memberOf`, `%terminologies.*`) require
   `options.async`; guards are enforced via `util.checkAllowAsync` (see
   `src/additional.js`, `src/terminologies.js`).
+- For mixed sync/async flows, `util.checkAllowAsync` belongs in the function
+  that creates an async promise; do not add it to pure Promise combiners such
+  as `sort` using `Promise.all(...)`.
 - `evaluate()`/`compile()` accept `options.debugger` for step-level tracing;
   the callback receives `(ctx, parentData, result, node)` after each eval step
   (see `engine.doEvalSync()` in `src/fhirpath.js`).

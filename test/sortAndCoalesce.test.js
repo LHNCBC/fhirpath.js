@@ -474,22 +474,6 @@ describe("sortAndCoalesce", () => {
       ).rejects.not.toThrow("Sort expression evaluation error: Sort expression evaluation error:");
     });
 
-
-    it("should sort reports async key expressions when async mode is disabled", () => {
-      const options = {
-        userInvocationTable: {
-          asyncIdentity: {
-            fn: (inputs) => Promise.resolve(inputs[0]),
-            arity: {0: []}
-          }
-        }
-      };
-      const evaluate = () => {
-        fhirpath.evaluate({}, "(3|2|1).sort(asyncIdentity())", {}, r4_model, options);
-      };
-      expect(evaluate).toThrow('The asynchronous function "sort" is not allowed.');
-    });
-
   });
 
 

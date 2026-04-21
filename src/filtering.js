@@ -151,19 +151,24 @@ engine.sort = function(data, ...sortArgs) {
 
   // Pre-compute sort keys once per item. This keeps the sync path fast and
   // enables an async path when any key expression resolves asynchronously.
-  const decorated = data.map(item => {
-    const keys = sortArgs.map(sortArg =>
-      evaluateSortExpression(sortArg, item));
-    return { item, keys };
-  });
-
-  const hasAsyncKey = decorated.some(entry =>
-    entry.keys.some(key => key instanceof Promise));
+  const decorated = new Array(data.length);
+  let hasAsyncKey = false;
+  for (let i = 0; i < data.length; i++) {
+    const item = data[i];
+    const keys = new Array(sortArgs.length);
+    for (let j = 0; j < sortArgs.length; j++) {
+      const key = evaluateSortExpression(sortArgs[j], item);
+      if (!hasAsyncKey && key instanceof Promise) {
+        hasAsyncKey = true;
+      }
+      keys[j] = key;
+    }
+    decorated[i] = { item, keys };
+  }
   if (!hasAsyncKey) {
     return sortDecorated(ctx, decorated, sortArgs).map(entry => entry.item);
   }
 
-  util.checkAllowAsync(ctx, 'sort');
   return Promise.all(
     decorated.map(entry => {
       return Promise.all(entry.keys).then(keys => ({

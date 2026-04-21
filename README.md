@@ -479,6 +479,32 @@ implementation (e.g. `userInvocationTable.pow.fn`) can be an array of
 value as is, you can use the `fhirpath.util.valData` or
 `fhirpath.util.valDataConverted` function (see src/utilities.js).
 
+
+If a user-defined function performs an asynchronous operation (returns a
+`Promise`), it should verify that async evaluation is allowed by calling
+`fhirpath.util.checkAllowAsync`.
+
+```js
+const userInvocationTable = {
+  asyncIdentity: {
+    fn: function(inputs) {
+      fhirpath.util.checkAllowAsync(this, 'asyncIdentity');
+      return Promise.resolve(inputs);
+    },
+    arity: {0: []}
+  }
+};
+
+// Throws without { async: true }.
+const resultPromise = fhirpath.evaluate(
+  { value: [3, 2, 1] },
+  "value.sort(asyncIdentity())",
+  {},
+  null,
+  { async: true, userInvocationTable }
+);
+```
+
 ## fhirpath CLI
 
 bin/fhirpath is a command-line tool for experimenting with FHIRPath.
