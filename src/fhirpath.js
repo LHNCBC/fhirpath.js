@@ -654,6 +654,31 @@ function cloneCtx(ctx, $this) {
 
 
 /**
+ * Unwraps parser-level sort argument wrappers for non-sort handlers.
+ *
+ * The sort grammar now emits SortDirectionArgument nodes. These wrappers must
+ * only be interpreted when a function explicitly expects SortArgument (built-in
+ * sort). For user overrides (including replacing sort), argument typing should
+ * behave as documented and operate on the wrapped expression itself.
+ *
+ * @param {string|Array} type - The declared argument type.
+ * @param {Object} param - The AST node for the argument.
+ * @returns {Object} The normalized AST node.
+ */
+function normalizeSortParamNode(type, param) {
+  const baseType = Array.isArray(type) ? type[0] : type;
+  if (baseType === "SortArgument") {
+    return param;
+  }
+  if ((param?.type === "SortDirectionArgument" ||
+    param?.type === "SortArgument") && param?.children?.[0]) {
+    return param.children[0];
+  }
+  return param;
+}
+
+
+/**
  * Prepares and evaluates a parameter for FHIRPath function/operator invocation.
  * Returns the evaluated value, or a function for "Expr" type.
  *
@@ -665,6 +690,8 @@ function cloneCtx(ctx, $this) {
  * @throws {Error} - If an Identifier type param is not a TermExpression.
  */
 function makeParam(ctx, parentData, type, param) {
+  param = normalizeSortParamNode(type, param);
+
   if(type === "Expr") {
     return function(data) {
       const $this = util.arraify(data);
