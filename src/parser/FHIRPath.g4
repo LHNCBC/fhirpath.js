@@ -39,7 +39,8 @@ term
         | literal                                               #literalTerm
         | externalConstant                                      #externalConstantTerm
         | '(' expression ')'                                    #parenthesizedTerm
-        | instanceSelector                                      #instanceSelectorTerm
+// TODO: Add instance selector support
+//        | instanceSelector                                      #instanceSelectorTerm
         ;
 
 literal
@@ -79,6 +80,8 @@ paramList
         : expression (',' expression)*
         ;
 
+// TODO: Add instance selector support
+/*
 // Instance selector (FHIRPath object construction syntax - same as in CQL)
 instanceSelector
         : qualifiedIdentifier '{' (':' | (instanceElementSelector (',' instanceElementSelector)*)) '}'
@@ -87,6 +90,7 @@ instanceSelector
 instanceElementSelector
         : identifier ':' expression
         ;
+*/
 
 quantity
         : (INTEGER | DECIMAL) unit?
