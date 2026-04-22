@@ -1,6 +1,7 @@
 const fhirpath = require("../src/fhirpath");
 const fhirpath_r4_model = require("../fhir-context/r4");
 const {mockRestore, mockFetchResults} = require("./mock-fetch-results");
+const patientExample2 = require("./resources/r4/patient-example-2.json");
 
 const testPatient = {
   resourceType: "Patient",
@@ -184,6 +185,20 @@ describe("pathname()", () => {
       );
       expect(result).toEqual(["Observation.component[0].code[0].coding[0]"]);
     });
+
+    test("returns indexed paths for _element-only array entries", () => {
+      const result = fhirpath.evaluate(
+        patientExample2,
+        "Patient.address.pathname()",
+        {},
+        fhirpath_r4_model,
+        { resolveInternalTypes: false }
+      );
+      expect(result).toEqual([
+        "Patient.address[0]",
+        "Patient.address[1]"
+      ]);
+    });
   });
 
   describe("pathname with short parameter", () => {
@@ -247,6 +262,20 @@ describe("pathname()", () => {
       );
       // component = array[0], code = singleton, coding = array[0]
       expect(result).toEqual(["Observation.component[0].code.coding[0]"]);
+    });
+
+    test("short=true keeps indices for _element-only array entries", () => {
+      const result = fhirpath.evaluate(
+        patientExample2,
+        "Patient.address.pathname(true)",
+        {},
+        fhirpath_r4_model,
+        { resolveInternalTypes: false }
+      );
+      expect(result).toEqual([
+        "Patient.address[0]",
+        "Patient.address[1]"
+      ]);
     });
   });
 
