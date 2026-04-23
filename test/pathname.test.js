@@ -405,6 +405,26 @@ describe("pathname()", () => {
     });
   });
 
+  describe("chained evaluations with resolveInternalTypes=false", () => {
+    test("keeps pathname() for ResourceNode input collections", () => {
+      const first = fhirpath.evaluate(
+        testPatient,
+        "Patient.name.first()",
+        {},
+        fhirpath_r4_model,
+        { resolveInternalTypes: false }
+      );
+      const second = fhirpath.evaluate(
+        first,
+        "$this.pathname()",
+        {},
+        fhirpath_r4_model,
+        { resolveInternalTypes: false }
+      );
+      expect(second).toEqual(["Patient.name[0]"]);
+    });
+  });
+
   describe("resolve() provenance filtering", () => {
     test("excludes items resolved outside the input resource", (done) => {
       const inputObservation = {

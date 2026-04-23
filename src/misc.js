@@ -862,6 +862,23 @@ function buildPathname(node, short) {
 
 
 /**
+ * Returns the top-most ancestor for a ResourceNode, or the input as-is.
+ *
+ * @param {*} node - a ResourceNode or any other value.
+ * @return {*}
+ */
+function getTopRoot(node) {
+  let rootNode = node;
+  if (rootNode instanceof ResourceNode) {
+    while (rootNode.parentResNode) {
+      rootNode = rootNode.parentResNode;
+    }
+  }
+  return rootNode;
+}
+
+
+/**
  * Returns true when a ResourceNode belongs to the current input resource.
  *
  * @param {ResourceNode} node - a node from pathname() input collection.
@@ -873,21 +890,19 @@ function isNodeInInputResource(node, dataRoot) {
     return true;
   }
 
-  let root = node;
-  while (root?.parentResNode) {
-    root = root.parentResNode;
-  }
+  const root = getTopRoot(node);
 
   for (let i = 0; i < dataRoot.length; i++) {
     const item = dataRoot[i];
-    if (item === root) {
+    const itemRoot = getTopRoot(item);
+    if (itemRoot === root) {
       return true;
     }
     if (
-      item instanceof ResourceNode &&
-      item.data != null &&
+      itemRoot instanceof ResourceNode &&
+      itemRoot.data != null &&
       root?.data != null &&
-      item.data === root.data
+      itemRoot.data === root.data
     ) {
       return true;
     }
@@ -917,7 +932,6 @@ engine.pathnameFn = function(coll, short) {
   const dataRoot = this?.dataRoot;
   for (let i = 0; i < coll.length; i++) {
     const item = coll[i];
-    // Only include ResourceNode instances — computed values are excluded
     if (item instanceof ResourceNode && isNodeInInputResource(item, dataRoot)) {
       result.push(buildPathname(item, short));
     }
