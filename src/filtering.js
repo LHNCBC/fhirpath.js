@@ -442,11 +442,11 @@ function compareValues(ctx, a, b) {
 
   // Use existing FHIRPath comparison logic from equality.js.
   // The scalar helper avoids per-compare singleton array allocations.
-  const [a0, b0] = equality.typecheckScalars(ctx, a, b);
+  const [a0, b0, exchanged] = equality.typecheckScalars(ctx, a, b);
 
   // Handle FP_Type objects (dates, times, quantities, etc.)
   if (a0 instanceof FP_Type) {
-    const compareResult = a0.compare(b0);
+    const compareResult = exchanged ? -a0.compare(b0) : a0.compare(b0);
     if (compareResult === null) {
       throw new Error('Cannot sort incomparable values');
     }

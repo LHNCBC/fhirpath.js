@@ -480,6 +480,26 @@ describe("sortAndCoalesce", () => {
     });
 
 
+    it("should sort mixed Number and Quantity values consistently regardless of input order", () => {
+      const variables = { n: 10 };
+      const sortNumberThenQuantity = fhirpath.evaluate(
+        {},
+        "(%n).combine(2 '1').sort().select($this.toString())",
+        variables,
+        r4_model
+      );
+      const sortQuantityThenNumber = fhirpath.evaluate(
+        {},
+        "(2 '1').combine(%n).sort().select($this.toString())",
+        variables,
+        r4_model
+      );
+
+      expect(sortNumberThenQuantity).toEqual(["2 '1'", "10"]);
+      expect(sortQuantityThenNumber).toEqual(["2 '1'", "10"]);
+    });
+
+
     it("should sort throws when key expression returns more than one item", () => {
       const patient = getPatientWithNames();
       const evaluate = () => {
