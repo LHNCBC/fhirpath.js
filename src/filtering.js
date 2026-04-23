@@ -89,6 +89,9 @@ engine.selectMacro = function(data, expr) {
  * See https://build.fhir.org/ig/HL7/FHIRPath/#coalesce
  * @param {Array} data - the input collection.
  * @param {...Function} exprs - expressions to evaluate against the input.
+ * Note: exprs are ExprAtCurrent thunks created by makeParam().
+ * Each expr evaluates against `data` as parentData, but `$this` remains from
+ * the outer context. coalesce is lazy/short-circuit, not `$this`-scoped.
  * @returns {Array|Promise<Array>} the first non-empty result, or an empty
  *   collection if all expressions are empty. Returns a Promise when expression
  *   evaluation is asynchronous.

@@ -76,6 +76,26 @@ describe("sortAndCoalesce", () => {
     });
 
 
+    it("should preserve outer $this while evaluating coalesce params on the input collection", () => {
+      const patient = getPatientWithNames();
+      const outerThisResult = fhirpath.evaluate(
+        patient,
+        "Patient.name.coalesce($this)",
+        r4_model
+      );
+      const inputCollectionResult = fhirpath.evaluate(
+        patient,
+        "Patient.name.coalesce(family)",
+        r4_model
+      );
+
+      expect(outerThisResult).toHaveLength(1);
+      expect(outerThisResult[0].resourceType).toBe("Patient");
+      expect(outerThisResult[0].id).toBe("pat1");
+      expect(inputCollectionResult).toEqual(["Smith", "Pos", "Pos"]);
+    });
+
+
     it("should coalesce short-circuits later async arguments after first non-empty async result", async () => {
       const callCounts = {
         asyncFirst: 0,
