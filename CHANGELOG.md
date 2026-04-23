@@ -23,8 +23,8 @@ This log documents significant changes for each release.  This project follows
 - Updated the unit test scripts to call Jest via a Windows-compatible path.
 
 ### Fixed
-- Fixed a rare time parsing issue when milliseconds are omitted from a time
-  value.
+- Fixed a rare error that occurred during unit tests when the time value was
+  missing milliseconds.
 
 ## [4.9.3] - 2026-03-31
 ### Changed
