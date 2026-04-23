@@ -20,8 +20,12 @@
  */
 const path = require('path');
 const fs = require('fs');
-const { spawn, fork } = require('child_process');
-const npmCacheDir = path.join(__dirname, 'benchmark/.npm-cache');
+const os = require('os');
+const { spawn, spawnSync, fork } = require('child_process');
+const benchmarkTempDir = path.join(os.tmpdir(), 'fhirpath-benchmark');
+const npmCacheDir = path.join(benchmarkTempDir, '.npm-cache');
+const previousPackageDir = path.join(benchmarkTempDir, 'prev-fhirpath');
+const previousSourceDir = path.join(benchmarkTempDir, 'prev-src');
 
 // Insert performance test suites here:
 const availableTests = [
@@ -40,6 +44,10 @@ const availableTests = [
   'subsetof',
   'union'
 ];
+
+
+prepareBenchmarkTempDir();
+
 
 const { Command, Option, InvalidArgumentError } = require('commander');
 const program = new Command();
@@ -103,6 +111,18 @@ let activeProcess;
 
 
 /**
+ * Resets benchmark temporary artifacts from previous runs.
+ */
+function prepareBenchmarkTempDir() {
+  spawnSync('git', ['worktree', 'remove', '--force', previousSourceDir], {
+    stdio: 'ignore'
+  });
+  fs.rmSync(benchmarkTempDir, { recursive: true, force: true });
+  fs.mkdirSync(benchmarkTempDir, { recursive: true });
+}
+
+
+/**
  * Runs a command and returns a promise.
  * @param {string} command - command to execute.
  * @param {string[]} args - command arguments.
@@ -147,7 +167,7 @@ function runCommand(command, args, options = {}) {
 
 
 /**
- * Installs the baseline package into test/benchmark/prev-fhirpath.
+ * Installs the baseline package in a temporary directory.
  * The baseline can come from npm (--prevVersion) or from a local git ref
  * (--prevRef).
  * @param {Object} opts - parsed options from commander.
@@ -155,38 +175,50 @@ function runCommand(command, args, options = {}) {
  */
 async function installBaseline(opts) {
   if (!opts.prevRef) {
-    await runCommand('npm', ['i', '--prefix', './test/benchmark/prev-fhirpath',
+    await runCommand('npm', ['i', '--prefix', previousPackageDir,
       'fhirpath@' + opts.prevVersion]);
     return;
   }
 
-  const prevSrcPath = path.join(__dirname, 'benchmark/prev-src');
   try {
-    await runCommand('git', ['worktree', 'remove', '--force', prevSrcPath], {
+    await runCommand('git', ['worktree', 'remove', '--force', previousSourceDir], {
       stdio: 'ignore'
     });
   } catch {
     // Ignore: worktree may not exist yet.
   }
 
-  await runCommand('git', ['worktree', 'add', '--detach', '--force', prevSrcPath,
-    opts.prevRef]);
+  await runCommand('git', ['worktree', 'add', '--detach', '--force',
+    previousSourceDir, opts.prevRef]);
   await runCommand('npm', ['pack', '--silent'], {
-    cwd: prevSrcPath
+    cwd: previousSourceDir
   });
-  const tarballName = fs.readdirSync(prevSrcPath)
+  const tarballName = fs.readdirSync(previousSourceDir)
     .filter(name => name.endsWith('.tgz'))
     .map(name => ({
       name,
-      mtime: fs.statSync(path.join(prevSrcPath, name)).mtimeMs
+      mtime: fs.statSync(path.join(previousSourceDir, name)).mtimeMs
     }))
     .sort((a, b) => b.mtime - a.mtime)[0]?.name;
   if (!tarballName) {
-    throw new Error('Could not locate npm pack tarball in ' + prevSrcPath);
+    throw new Error(
+      'Could not locate npm pack tarball in ' + previousSourceDir
+    );
   }
-  const tarballPath = path.join(prevSrcPath, tarballName);
-  await runCommand('npm', ['i', '--prefix', './test/benchmark/prev-fhirpath',
+  const tarballPath = path.join(previousSourceDir, tarballName);
+  await runCommand('npm', ['i', '--prefix', previousPackageDir,
     tarballPath]);
+}
+
+
+/**
+ * Removes temporary benchmark artifacts.
+ */
+function cleanupBenchmarkArtifacts() {
+  spawnSync('git', ['worktree', 'remove', '--force', previousSourceDir], {
+    stdio: 'ignore'
+  });
+  fs.rmSync(benchmarkTempDir, { recursive: true, force: true });
 }
 
 
@@ -195,11 +227,18 @@ async function installBaseline(opts) {
  */
 function startBenchmarkRunner() {
   benchmarkingProcess = fork(__dirname + '/benchmark/runner.js', {
-    stdio: 'inherit'
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      FHIRPATH_BENCHMARK_PREV_DIR: previousPackageDir
+    }
   });
   // Pass options to the benchmarking process to run benchmarks
   benchmarkingProcess.send(options);
 }
+
+
+process.on('exit', cleanupBenchmarkArtifacts);
 
 
 process.on('SIGINT', () => {

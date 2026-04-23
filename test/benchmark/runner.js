@@ -12,9 +12,15 @@ const patientExample = require('../resources/r4/patient-example.json');
 const current_r4_model = require('../../fhir-context/r4');
 const open = require('open');
 const currentVersion = packageInfo.version;
-const previous_fhirpath = require('./prev-fhirpath/node_modules/fhirpath');
-const previous_r4_model = require('./prev-fhirpath/node_modules/fhirpath/fhir-context/r4');
-const previousVersion = require('./prev-fhirpath/node_modules/fhirpath/package.json').version;
+const previousPackageDir = process.env.FHIRPATH_BENCHMARK_PREV_DIR ||
+  path.join(__dirname, 'prev-fhirpath');
+const previousPackagePath = path.join(previousPackageDir,
+  'node_modules/fhirpath');
+const previous_fhirpath = require(previousPackagePath);
+const previous_r4_model = require(path.join(previousPackagePath,
+  'fhir-context/r4'));
+const previousVersion = require(path.join(previousPackagePath,
+  'package.json')).version;
 const { withCodSpeed } = require('@codspeed/tinybench-plugin');
 const resultsDir = path.join(__dirname, 'results');
 const outputReportFilename = 'compare-performance-report.html';
