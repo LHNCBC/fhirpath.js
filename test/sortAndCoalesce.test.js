@@ -1,5 +1,6 @@
 const fhirpath = require("../src/fhirpath");
 const r4_model = require("../fhir-context/r4");
+const { FP_Type } = require("../src/types");
 
 
 describe("sortAndCoalesce", () => {
@@ -523,6 +524,29 @@ describe("sortAndCoalesce", () => {
 
       expect(sortNumberThenQuantity).toEqual(["2 '1'", "10"]);
       expect(sortQuantityThenNumber).toEqual(["2 '1'", "10"]);
+    });
+
+
+    it("should sort throws for incomparable Number and FP_Type regardless of input order", () => {
+      class IncomparableType extends FP_Type {
+        compare() {
+          return null;
+        }
+      }
+
+      const variables = {
+        a: new IncomparableType(),
+        b: 1
+      };
+      const evaluateAThenB = () => {
+        fhirpath.evaluate({}, "%a.combine(%b).sort()", variables, r4_model);
+      };
+      const evaluateBThenA = () => {
+        fhirpath.evaluate({}, "%b.combine(%a).sort()", variables, r4_model);
+      };
+
+      expect(evaluateAThenB).toThrow("Cannot sort incomparable values");
+      expect(evaluateBThenA).toThrow("Cannot sort incomparable values");
     });
 
 

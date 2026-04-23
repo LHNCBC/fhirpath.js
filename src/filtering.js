@@ -446,11 +446,11 @@ function compareValues(ctx, a, b) {
 
   // Handle FP_Type objects (dates, times, quantities, etc.)
   if (a0 instanceof FP_Type) {
-    const compareResult = exchanged ? -a0.compare(b0) : a0.compare(b0);
+    const compareResult = a0.compare(b0);
     if (compareResult === null) {
       throw new Error('Cannot sort incomparable values');
     }
-    return compareResult;
+    return exchanged ? -compareResult : compareResult;
   }
 
   // Reject non-primitive types that can't be meaningfully compared
