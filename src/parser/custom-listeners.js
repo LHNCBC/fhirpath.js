@@ -365,7 +365,8 @@ for (let p of Object.getOwnPropertyNames(Listener.prototype)) {
           // need to read out the text for them
           // Note: doesn't handle the delimited text cases correctly in the engine later on
           if (parent && ctx.ruleIndex === Parser.RULE_expression) {
-            if (ctx.parentCtx?.ruleIndex === Parser.RULE_paramList) {
+            if (ctx.parentCtx?.ruleIndex === Parser.RULE_paramList ||
+              ctx.parentCtx?.ruleIndex === Parser.RULE_sortArgument) {
               parent.text = ctx.getText();
             }
           }
@@ -381,7 +382,8 @@ for (let p of Object.getOwnPropertyNames(Listener.prototype)) {
           // need to read out the text for them
           // Note: doesn't handle the delimited text cases correctly in the engine later on
           if (parent && ctx.ruleIndex === Parser.RULE_expression) {
-            if (ctx.parentCtx?.ruleIndex === Parser.RULE_paramList) {
+            if (ctx.parentCtx?.ruleIndex === Parser.RULE_paramList ||
+              ctx.parentCtx?.ruleIndex === Parser.RULE_sortArgument) {
               if (parent.type === "InvocationExpression") {
                 parent.text = ctx.getText();
               }

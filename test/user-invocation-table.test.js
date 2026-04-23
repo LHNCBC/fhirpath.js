@@ -120,6 +120,29 @@ describe("sort override", () => {
     expect(result).toEqual(["x"]);
   });
 
+
+  it("passes identifier text to an overridden sort function", () => {
+    const options = {
+      userInvocationTable: {
+        sort: {
+          fn: (_input, id) => [id],
+          arity: {1: ["Identifier"]}
+        }
+      }
+    };
+
+    const result = fhirpath.evaluate(
+      { value: [1, 2] },
+      "value.sort(x)",
+      null,
+      null,
+      options
+    );
+
+    expect(result).toEqual(["x"]);
+  });
+
+
 });
 
 
