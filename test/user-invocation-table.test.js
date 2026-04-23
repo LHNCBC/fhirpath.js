@@ -121,6 +121,28 @@ describe("sort override", () => {
   });
 
 
+  it("passes evaluated arguments to an overridden delimited sort function", () => {
+    const options = {
+      userInvocationTable: {
+        sort: {
+          fn: (input, param) => [param],
+          arity: {1: ["String"]}
+        }
+      }
+    };
+
+    const result = fhirpath.evaluate(
+      { value: [1, 2] },
+      "value.`sort`('x')",
+      null,
+      null,
+      options
+    );
+
+    expect(result).toEqual(["x"]);
+  });
+
+
   it("passes identifier text to an overridden sort function", () => {
     const options = {
       userInvocationTable: {

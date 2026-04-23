@@ -612,7 +612,7 @@ engine.IndexerExpression = function(ctx, parentData, node) {
 
 engine.Functn = function(ctx, parentData, node) {
   // Handle special case for sort function, doesn't pre-evaluate parameters
-  if (node.text === 'sort') {
+  if (getIdentifierVal(node.text) === 'sort') {
     return ['sort', { children: node.children }];
   }
   

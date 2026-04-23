@@ -333,6 +333,22 @@ describe("sortAndCoalesce", () => {
     });
 
 
+    it("should sort with delimited sort invocation", () => {
+      const expr = "(3|2|1).`sort`($this)";
+      const result = fhirpath.evaluate({}, expr, r4_model);
+
+      expect(result).toEqual([1, 2, 3]);
+    });
+
+
+    it("should sort descending with delimited sort invocation", () => {
+      const expr = "(3|1|2).`sort`($this desc)";
+      const result = fhirpath.evaluate({}, expr, r4_model);
+
+      expect(result).toEqual([3, 2, 1]);
+    });
+
+
     it("should sort descending numeric", () => {
       const expr = "(1|2|3|10).sort($this desc)";
       const result = fhirpath.evaluate({}, expr, r4_model);
