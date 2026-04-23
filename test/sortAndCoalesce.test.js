@@ -295,6 +295,32 @@ describe("sortAndCoalesce", () => {
     });
 
 
+    it("should sort collections with several equal numeric values", () => {
+      const expr = "(2).combine(1).combine(2).combine(1).combine(2).sort()";
+      const result = fhirpath.evaluate({}, expr, r4_model);
+
+      expect(result).toEqual([1, 1, 2, 2, 2]);
+    });
+
+
+    it("should sort equal Number and Quantity values without dropping duplicates", () => {
+      const expr = "(2 '1').combine(2).combine(1).combine(1 '1')." +
+        "combine(2).combine(1 '1').combine(1).sort()." +
+        "select($this.toString())";
+      const result = fhirpath.evaluate({}, expr, r4_model);
+
+      expect(result).toHaveLength(7);
+      expect(result.filter(v => v === "1")).toHaveLength(2);
+      expect(result.filter(v => v === "1 '1'")).toHaveLength(2);
+      expect(result.filter(v => v === "2")).toHaveLength(2);
+      expect(result.filter(v => v === "2 '1'")).toHaveLength(1);
+      expect(result.slice(0, 4).every(v => v === "1" || v === "1 '1'"))
+        .toBe(true);
+      expect(result.slice(4).every(v => v === "2" || v === "2 '1'"))
+        .toBe(true);
+    });
+
+
     it("should sort with explicit $this parameter", () => {
       const expr = "(3|2|1).sort($this)";
       const result = fhirpath.evaluate({}, expr, r4_model);
