@@ -68,8 +68,7 @@ invocation                          // Terms that can be used after the function
         ;
 
 functn
-        : 'sort' '(' (sortArgument (',' sortArgument)*)? ')'
-        | '`sort`' '(' (sortArgument (',' sortArgument)*)? ')'
+        : ('sort' | '`sort`') '(' (sortArgument (',' sortArgument)*)? ')'
         | identifier '(' paramList? ')'
         ;
 
