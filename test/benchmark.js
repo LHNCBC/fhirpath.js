@@ -22,10 +22,11 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { spawn, spawnSync, fork } = require('child_process');
-const benchmarkTempDir = path.join(os.tmpdir(), 'fhirpath-benchmark');
-const npmCacheDir = path.join(benchmarkTempDir, '.npm-cache');
-const previousPackageDir = path.join(benchmarkTempDir, 'prev-fhirpath');
-const previousSourceDir = path.join(benchmarkTempDir, 'prev-src');
+
+let benchmarkRunDir = null;
+let npmCacheDir = null;
+let previousPackageDir = null;
+let previousSourceDir = null;
 
 // Insert performance test suites here:
 const availableTests = [
@@ -44,9 +45,6 @@ const availableTests = [
   'subsetof',
   'union'
 ];
-
-
-prepareBenchmarkTempDir();
 
 
 const { Command, Option, InvalidArgumentError } = require('commander');
@@ -99,10 +97,7 @@ program
   .addOption(new Option(`-o, --mathMode <mode>`,
     'mathematical operations mode')
     .choices(['native', 'precise'])
-    .default('native'))
-  .parse(process.argv);
-
-const options = program.opts();
+    .default('native'));
 
 // Process for running benchmarks. We need a separate process to run the tests
 // to free the main process from synchronous code to listen for the SIGINT event.
@@ -111,14 +106,25 @@ let activeProcess;
 
 
 /**
- * Resets benchmark temporary artifacts from previous runs.
+ * Parses command-line arguments and returns benchmark options.
+ * @returns {Object}
  */
-function prepareBenchmarkTempDir() {
-  spawnSync('git', ['worktree', 'remove', '--force', previousSourceDir], {
-    stdio: 'ignore'
-  });
-  fs.rmSync(benchmarkTempDir, { recursive: true, force: true });
-  fs.mkdirSync(benchmarkTempDir, { recursive: true });
+function parseOptions() {
+  program.parse(process.argv);
+  return program.opts();
+}
+
+
+/**
+ * Creates temporary directories for this benchmark run.
+ */
+function setupBenchmarkRunDirs() {
+  benchmarkRunDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'fhirpath-benchmark-')
+  );
+  npmCacheDir = path.join(benchmarkRunDir, '.npm-cache');
+  previousPackageDir = path.join(benchmarkRunDir, 'prev-fhirpath');
+  previousSourceDir = path.join(benchmarkRunDir, 'prev-src');
 }
 
 
@@ -180,14 +186,6 @@ async function installBaseline(opts) {
     return;
   }
 
-  try {
-    await runCommand('git', ['worktree', 'remove', '--force', previousSourceDir], {
-      stdio: 'ignore'
-    });
-  } catch {
-    // Ignore: worktree may not exist yet.
-  }
-
   await runCommand('git', ['worktree', 'add', '--detach', '--force',
     previousSourceDir, opts.prevRef]);
   await runCommand('npm', ['pack', '--silent'], {
@@ -215,54 +213,99 @@ async function installBaseline(opts) {
  * Removes temporary benchmark artifacts.
  */
 function cleanupBenchmarkArtifacts() {
+  if (!benchmarkRunDir) {
+    return;
+  }
+
   spawnSync('git', ['worktree', 'remove', '--force', previousSourceDir], {
     stdio: 'ignore'
   });
-  fs.rmSync(benchmarkTempDir, { recursive: true, force: true });
+  fs.rmSync(benchmarkRunDir, { recursive: true, force: true });
+  benchmarkRunDir = null;
+  npmCacheDir = null;
+  previousPackageDir = null;
+  previousSourceDir = null;
 }
 
 
 /**
  * Starts the benchmark runner process.
+ * @param {Object} options - parsed options from commander.
+ * @returns {Promise<void>}
  */
-function startBenchmarkRunner() {
-  benchmarkingProcess = fork(__dirname + '/benchmark/runner.js', {
-    stdio: 'inherit',
-    env: {
-      ...process.env,
-      FHIRPATH_BENCHMARK_PREV_DIR: previousPackageDir
-    }
+function startBenchmarkRunner(options) {
+  return new Promise((resolve, reject) => {
+    benchmarkingProcess = fork(__dirname + '/benchmark/runner.js', {
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        FHIRPATH_BENCHMARK_PREV_DIR: previousPackageDir
+      }
+    });
+    benchmarkingProcess.once('error', (error) => {
+      if (benchmarkingProcess) {
+        benchmarkingProcess = null;
+      }
+      reject(error);
+    });
+    benchmarkingProcess.once('exit', (code, signal) => {
+      if (benchmarkingProcess) {
+        benchmarkingProcess = null;
+      }
+      if (signal) {
+        reject(new Error('Benchmark runner failed with signal ' + signal));
+        return;
+      }
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error('Benchmark runner failed with code ' + code));
+    });
+    // Pass options to the benchmarking process to run benchmarks
+    benchmarkingProcess.send(options);
   });
-  // Pass options to the benchmarking process to run benchmarks
-  benchmarkingProcess.send(options);
 }
 
 
-process.on('exit', cleanupBenchmarkArtifacts);
+async function main() {
+  const options = parseOptions();
+  let interrupted = false;
 
+  const handleSigint = () => {
+    interrupted = true;
 
-process.on('SIGINT', () => {
-  // Kill the benchmarking process
-  if (activeProcess) {
-    activeProcess.kill('SIGKILL');
+    if (activeProcess) {
+      activeProcess.kill('SIGKILL');
+    }
+    if (benchmarkingProcess) {
+      benchmarkingProcess.kill('SIGKILL');
+      // Displays the bash prompt on a new line.
+      console.log('');
+    }
+  };
+
+  try {
+    setupBenchmarkRunDirs();
+    process.once('SIGINT', handleSigint);
+    await installBaseline(options);
+    await startBenchmarkRunner(options);
+    process.exitCode = 0;
+  } catch (error) {
+    if (!interrupted) {
+      console.error(error.message || error);
+    }
+    // The value of the SIGINT signal code is 2
+    // (See https://man7.org/linux/man-pages/man7/signal.7.html).
+    // If Node.js receives a fatal signal such as SIGKILL or SIGHUP, then its
+    // exit code will be 128 plus the value of the signal code:
+    // 128 + 2 = 130 (see https://nodejs.org/api/process.html#exit-codes)
+    process.exitCode = interrupted ? 130 : 1;
+  } finally {
+    process.removeListener('SIGINT', handleSigint);
+    cleanupBenchmarkArtifacts();
   }
-  if (benchmarkingProcess) {
-    benchmarkingProcess.kill('SIGKILL');
-    // Displays the bash prompt on a new line.
-    console.log('');
-  }
-
-  // The value of the SIGINT signal code is 2 (See https://man7.org/linux/man-pages/man7/signal.7.html).
-  // If Node.js receives a fatal signal such as SIGKILL or SIGHUP, then its exit
-  // code will be 128 plus the value of the signal code:
-  // 128 + 2 = 130 (see https://nodejs.org/api/process.html#exit-codes)
-  process.exit(130);
-});
+}
 
 
-installBaseline(options)
-  .then(startBenchmarkRunner)
-  .catch((error) => {
-    console.error(error.message || error);
-    process.exit(1);
-  });
+main();
