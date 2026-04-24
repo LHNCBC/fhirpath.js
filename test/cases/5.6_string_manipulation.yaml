@@ -344,6 +344,10 @@ tests:
     expression: "'Test String'.matchesFull('test string', '')"
     result: [false]
 
+  - desc: '** matchesFull with flags - multiline anchors'
+    expression: "'abc\ndef'.matchesFull('abc', 'm')"
+    result: [true]
+
   - desc: '** matchesFull with flags - invalid flag throws error'
     expression: "'first line\nsecond line'.matchesFull('first line.second line', 's')"
     error: true

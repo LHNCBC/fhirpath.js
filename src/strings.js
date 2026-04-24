@@ -334,6 +334,9 @@ engine.matches = function (coll, regex, flags) {
 /**
  * Implements the FHIRPath `matchesFull(regex[, flags])` function.
  * See https://build.fhir.org/ig/HL7/FHIRPath/#matchesfullregex--string-flags--string--boolean.
+ * Note: The implementation wraps `regex` in `^(?: ... )$`. If `flags`
+ * contains `m`, these anchors become line anchors and may match a single line
+ * within a multi-line string.
  * @param {Array} coll - input collection.
  * @param {string} regex - regular expression pattern.
  * @param {string} [flags] - FHIRPath regex flags (`i`, `m`).
