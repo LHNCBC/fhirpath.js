@@ -1559,105 +1559,111 @@ tests:
           - true
         model: r5
   - 'group: testQuantity':
-      - desc: '** testQuantity1'
+      - desc: '** equality with unit conversion'
         inputfile: patient-example.json
         expression: 4.0000 'g' = 4000.0 'mg'
         result:
           - true
         model: r5
-      - desc: '** testQuantity2'
+      - desc: '** equivalence with unit conversion'
         inputfile: patient-example.json
         expression: 4 'g' ~ 4000 'mg'
         result:
           - true
         model: r5
-      - desc: '** testQuantity3'
+      - desc: '** not-equals with unit conversion (different values)'
         inputfile: patient-example.json
         expression: 4 'g' != 4040 'mg'
         result:
           - true
         model: r5
-      - desc: '** testQuantity4'
+      - desc: '** equivalence with unit conversion'
         inputfile: patient-example.json
         expression: 4 'g' ~ 4040 'mg'
         result:
           - true
         model: r5
         disable: true
-      - desc: '** testQuantity5'
+      - desc: '** equality with unit conversion: calendar units'
         inputfile: patient-example.json
         expression: 7 days = 1 week
         result:
           - true
         model: r5
-      - desc: '** testQuantity6'
+      - desc: '** equality with unit conversion: mixed UCUM and calendar units'
         inputfile: patient-example.json
         expression: 7 days = 1 'wk'
         result:
           - true
         model: r5
-      - desc: '** testQuantity7'
+      - desc: '** less-than with unit conversion'
         inputfile: patient-example.json
         expression: 6 days < 1 week
         result:
           - true
         model: r5
-      - desc: '** testQuantity8'
+      - desc: '** greater-than with unit conversion'
         inputfile: patient-example.json
         expression: 8 days > 1 week
         result:
           - true
         model: r5
-      - desc: '** testQuantity9'
+      - desc: '** multiplication with unit conversion'
         inputfile: patient-example.json
         expression: 2.0 'cm' * 2.0 'm' = 0.040 'm2'
         result:
           - true
         model: r5
-      - desc: '** testQuantity10'
+      - desc: '** division producing compound unit'
         inputfile: patient-example.json
         expression: 4.0 'g' / 2.0 'm' = 2 'g/m'
         result:
           - true
         model: r5
-      - desc: '** testQuantity11'
+      - desc: '** division of same units produces dimensionless quantity'
         inputfile: patient-example.json
         expression: 1.0 'm' / 1.0 'm' = 1 '1'
         result:
           - true
         model: r5
   - 'group: testCollectionBoolean':
-      - desc: '** testCollectionBoolean1'
+      - desc: >-
+          ** singleton evaluation: multi-item collection as criterion is an
+          error
         inputfile: patient-example.json
         expression: iif(1 | 2 | 3, true, false)
         error: true
         model: r5
         disable: true
-      - desc: '** testCollectionBoolean2'
+      - desc: '** empty collection as criterion evaluates to false'
         inputfile: patient-example.json
         expression: iif({}, true, false)
         result:
           - false
         model: r5
-      - desc: '** testCollectionBoolean3'
+      - desc: '** baseline: simple boolean true criterion'
         inputfile: patient-example.json
         expression: iif(true, true, false)
         result:
           - true
         model: r5
-      - desc: '** testCollectionBoolean4'
+      - desc: >-
+          ** singleton evaluation: union with empty resolves to single-item
+          collection
         inputfile: patient-example.json
         expression: iif({} | true, true, false)
         result:
           - true
         model: r5
-      - desc: '** testCollectionBoolean5'
+      - desc: >-
+          ** short-circuit: otherwise-result not evaluated when criterion is
+          true
         inputfile: patient-example.json
         expression: iif(true, true, 1/0)
         result:
           - true
         model: r5
-      - desc: '** testCollectionBoolean6'
+      - desc: '** short-circuit: true-result not evaluated when criterion is false'
         inputfile: patient-example.json
         expression: iif(false, 1/0, true)
         result:
@@ -2909,7 +2915,7 @@ tests:
         model: r5
       - desc: '** Prototype definition - not part of spec yet'
         inputfile: patient-example.json
-        expression: (1 | 2 | 3).sort($this desc) = (3 | 2 | 1)
+        expression: (1 | 2 | 3).sort(-$this) = (3 | 2 | 1)
         result:
           - true
         model: r5
@@ -2927,10 +2933,11 @@ tests:
         model: r5
       - desc: '** Prototype definition - not part of spec yet'
         inputfile: patient-example.json
-        expression: ('a' | 'b' | 'c').sort($this desc) = ('c' | 'b' | 'a')
+        expression: ('a' | 'b' | 'c').sort(-$this) = ('c' | 'b' | 'a')
         result:
           - true
         model: r5
+        disable: true
       - desc: '** Prototype definition - not part of spec yet'
         inputfile: patient-example.json
         expression: Patient.name[0].given.sort() = ('James' | 'Peter')
@@ -2939,11 +2946,11 @@ tests:
         model: r5
       - desc: '** Prototype definition - not part of spec yet'
         inputfile: patient-example.json
-        expression: Patient.name.sort(family desc, given.first() desc).first().use = 'usual'
+        expression: Patient.name.sort(-family, -given.first()).first().use = 'usual'
         result:
           - true
         model: r5
-    disable: true
+        disable: true
   - 'group: testEquality':
       - desc: '** testEquality1'
         inputfile: patient-example.json
@@ -4938,6 +4945,12 @@ tests:
         expression: (1 | 2 | 3) & 'b' = '1,2,3b'
         error: true
         model: r5
+      - desc: '** testConcatenate5'
+        inputfile: patient-example.json
+        expression: '{} & {} = '''''
+        result:
+          - true
+        model: r5
   - 'group: testMinus':
       - desc: '** testMinus1'
         inputfile: patient-example.json
@@ -5118,6 +5131,12 @@ tests:
         expression: 5 div 0
         model: r5
         result: []
+      - desc: '** testDiv6'
+        inputfile: patient-example.json
+        expression: '-5.5 div 2 = -2'
+        result:
+          - true
+        model: r5
       - desc: '** testDivEmpty1'
         inputfile: patient-example.json
         expression: 1 div {}
@@ -5163,6 +5182,12 @@ tests:
         expression: 5 mod 0
         model: r5
         result: []
+      - desc: '** testMod6'
+        inputfile: patient-example.json
+        expression: '-5.5 mod 2 = -1.5'
+        result:
+          - true
+        model: r5
       - desc: '** testModEmpty1'
         inputfile: patient-example.json
         expression: 1 mod {}
@@ -6058,14 +6083,16 @@ tests:
           - false
         model: r5
   - 'group: index-part':
-      - desc: '** testIndex'
+      - desc: '** select $index based on condition'
         inputfile: patient-example.json
         expression: Patient.telecom.select(iif(value='(03) 3410 5613', $index, {} ))
         result:
           - 2
         model: r5
   - 'group: period':
-      - desc: '** testPeriodInvariantOld'
+      - desc: >-
+          ** old period invariant using hasValue() - incorrectly rejects valid
+          boundary data
         inputfile: patient-example-period.json
         expression: >-
           Patient.identifier.period.all(start.hasValue().not() or
@@ -6073,7 +6100,9 @@ tests:
         result:
           - false
         model: r5
-      - desc: '** testPeriodInvariantNew'
+      - desc: >-
+          ** new period invariant using lowBoundary/highBoundary - correctly
+          accepts boundary data
         inputfile: patient-example-period.json
         expression: >-
           Patient.identifier.period.all(start.empty() or end.empty() or
