@@ -21,8 +21,6 @@ const engine = {};
  *   if any expression evaluation is asynchronous.
  */
 engine.whereMacro = function(parentData, expr) {
-  if(parentData !== false && ! parentData) { return []; }
-
   return util.flatten(parentData.map((x, i) => {
     this.$index = i;
     const condition = expr(x);
@@ -45,7 +43,7 @@ engine.whereMacro = function(parentData, expr) {
  */
 engine.extension = function(parentData, url) {
   const ctx = this;
-  if(parentData !== false && ! parentData || !url) { return []; }
+  if(!url) { return []; }
 
   return util.flatten(parentData.map((x, i) => {
     this.$index = i;
@@ -75,7 +73,6 @@ engine.extension = function(parentData, url) {
  * @returns {Array} a flattened collection of projected values.
  */
 engine.selectMacro = function(data, expr) {
-  if(data !== false && ! data) { return []; }
   return util.flatten(data.map((x, i) => {
     this.$index = i;
     return expr(x);
@@ -97,8 +94,6 @@ engine.selectMacro = function(data, expr) {
  *   evaluation is asynchronous.
  */
 engine.coalesce = function(data, ...exprs) {
-  if(data !== false && ! data) { return []; }
-
   // Evaluate each expression in sequence until we find a non-empty result
   for (let i = 0; i < exprs.length; i++) {
     const expr = exprs[i];
@@ -142,8 +137,6 @@ engine.coalesce = function(data, ...exprs) {
  *   when any sort expression evaluates asynchronously.
  */
 engine.sort = function(data, ...sortArgs) {
-  if(data !== false && !data) { return []; }
-
   const ctx = this;
   // If no sort arguments provided, use natural ordering
   if (sortArgs.length === 0) {
@@ -348,6 +341,7 @@ function flattenGroups(groups) {
  * @param {{expr: Function, direction?: string}} sortArg - sort argument
  *   descriptor.
  * @param {*} item - the item being sorted.
+ * @throws {SortExpressionError} if the expression throws an error.
  * @returns {*|Promise<*>} the extracted singleton sort key, or a Promise when
  *   expression evaluation is asynchronous.
  */
@@ -370,18 +364,19 @@ function evaluateSortExpression(sortArg, item) {
 /**
  * Extracts a single sort key from a sort expression result collection.
  * @param {Array} result - sort expression result.
+ * @throws {SortExpressionError} if the result is not singleton.
  * @returns {*} the singleton sort key, or null for an empty result.
  */
 function extractSortValue(result) {
-  try {
-    if (result.length === 0) {
-      return null;
-    }
-    util.assertOnlyOne(result, 'Sort expression must return singleton value');
-    return result[0];
-  } catch (error) {
-    throw wrapSortExpressionError(error);
+  const len = result.length;
+  if (len === 0) {
+    return null;
+  } else if (len !== 1) {
+    throw new SortExpressionError(
+      'expected a singleton value, but got ' + util.toJSON(result)
+    );
   }
+  return result[0];
 }
 
 
@@ -416,7 +411,6 @@ function wrapSortExpressionError(error) {
 }
 
 
-
 /**
  * Normalizes an unknown thrown value to a message string.
  * @param {*} error - caught error value.
@@ -425,6 +419,7 @@ function wrapSortExpressionError(error) {
 function getErrorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
+
 
 /**
  * Compare two values using FHIRPath comparison semantics

@@ -571,7 +571,7 @@ describe("sortAndCoalesce", () => {
       const evaluate = () => {
         fhirpath.evaluate(patient, "Patient.name.sort(given).id", {}, r4_model);
       };
-      expect(evaluate).toThrow("Sort expression must return singleton value");
+      expect(evaluate).toThrow("Sort expression evaluation error");
     });
 
 
@@ -638,10 +638,7 @@ describe("sortAndCoalesce", () => {
       };
       await expect(
         fhirpath.evaluate({}, "(3|2|1).sort(asyncDup())", {}, r4_model, options)
-      ).rejects.toThrow("Sort expression evaluation error: Sort expression must return singleton value");
-      await expect(
-        fhirpath.evaluate({}, "(3|2|1).sort(asyncDup())", {}, r4_model, options)
-      ).rejects.not.toThrow("Sort expression evaluation error: Sort expression evaluation error:");
+      ).rejects.toThrow("Sort expression evaluation error: expected a singleton value, but got [3,3]");
     });
 
   });

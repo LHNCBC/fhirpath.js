@@ -680,13 +680,13 @@ function normalizeSortParamNode(type, param) {
 
 /**
  * Prepares and evaluates a parameter for FHIRPath function/operator invocation.
- * Returns the evaluated value, or a function for "Expr" type.
  *
  * @param {Object} ctx - The evaluation context.
  * @param {Array} parentData - The data from the parent node.
  * @param {string|Array} type - The expected type(s) of the parameter.
  * @param {Object} param - The AST node representing the parameter.
- * @returns {*} - The evaluated parameter value, or a function for "Expr" type.
+ * @returns {*} - The evaluated parameter value or a function if the parameter
+ *  type is "Expr" or similar.
  * @throws {Error} - If an Identifier type param is not a TermExpression.
  */
 function makeParam(ctx, parentData, type, param) {

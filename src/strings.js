@@ -411,7 +411,7 @@ engine.length = function (coll) {
  * Implements the FHIRPath `toChars()` function.
  * See https://hl7.org/fhirpath/#tochars-collection.
  * @param {Array} coll - input collection.
- * @returns {Array|string[]} character array, or an empty collection.
+ * @returns {string[]} character array, or an empty collection.
  */
 engine.toChars = function (coll) {
   const str = misc.singleton(coll, 'String');

@@ -70,12 +70,12 @@ engine.timeOfDay = function() {
 };
 
 /**
- *  Returns the FP_DateTime or FP_Date value from a collection item,
- *  converting from ResourceNode if necessary.
- *  @param {Object} ctx - the FHIRPath evaluation context.
- *  @param {*} item - a collection item.
- *  @returns {FP_DateTime|FP_Date|FP_Time|null} the parsed value, or null if
- *   the input is not a supported temporal value.
+ * Returns a date/time value from a collection element, converting from
+ * ResourceNode if necessary.
+ * @param {Object} ctx - the FHIRPath evaluation context.
+ * @param {*} item - a collection item.
+ * @returns {FP_DateTime|FP_Date|FP_Time|null} the parsed value, or null if
+ *  the input is not a supported temporal value.
  */
 function toDateTimeValue(ctx, item) {
   let v = item instanceof ResourceNode ? item.convertData() : item;
@@ -115,7 +115,7 @@ function getSingletonDateTimeValue(ctx, coll, fnName) {
 engine.yearOf = function(coll) {
   const ctx = this;
   const v = getSingletonDateTimeValue(ctx, coll, 'yearOf');
-  if (v instanceof FP_Time || !v) return [];
+  if (!v || v instanceof FP_Time) return [];
   return parseInt(v._getTimeParts()[0]);
 };
 
@@ -129,7 +129,7 @@ engine.yearOf = function(coll) {
 engine.monthOf = function(coll) {
   const ctx = this;
   const v = getSingletonDateTimeValue(ctx, coll, 'monthOf');
-  if (v instanceof FP_Time || !v) return [];
+  if (!v || v instanceof FP_Time) return [];
   if (v._getPrecision() < 1) return [];
   return parseInt(v._getTimeParts()[1].slice(1));
 };
@@ -144,7 +144,7 @@ engine.monthOf = function(coll) {
 engine.dayOf = function(coll) {
   const ctx = this;
   const v = getSingletonDateTimeValue(ctx, coll, 'dayOf');
-  if (v instanceof FP_Time || !v) return [];
+  if (!v || v instanceof FP_Time) return [];
   if (v._getPrecision() < 2) return [];
   return parseInt(v._getTimeParts()[2].slice(1));
 };
@@ -268,7 +268,7 @@ engine.timezoneOffsetOf = function(coll) {
  *  Returns the date component of a Date or DateTime value as an FP_Date.
  *  Returns empty for Time values or empty collections.
  *  @param {Array} coll - input collection.
- *  @return {FP_Date|[]} a single-element array containing the date component,
+ *  @return {[FP_Date]|[]} a single-element array containing the date component,
  *   or an empty array.
  */
 engine.dateOf = function(coll) {
@@ -291,7 +291,7 @@ engine.dateOf = function(coll) {
  *  Returns the time component of a DateTime value as an FP_Time.
  *  Returns empty if there is no time component, or for Date or Time inputs.
  *  @param {Array} coll - input collection.
- *  @return {FP_Time|[]} a single-element array containing the time component,
+ *  @return {[FP_Time]|[]} a single-element array containing the time component,
  *   or an empty array.
  */
 engine.timeOf = function(coll) {

@@ -121,9 +121,10 @@ const baseResourceTypes = {Resource: 1, DomainResource: 1};
  *  undefined or null.
  * @param {string} url - The URL of the resource to fetch.
  * @param {boolean} isCanonical - Indicates if the URL is a canonical URL.
- * @returns {Promise<Object|ResourceNode|null>} A promise resolving to the
- *  resource object if found, a ResourceNode for contained resources resolved
- *  in the input resource, or null.
+ * @returns {Promise<Object|ResourceNode|null>} Resolves to a plain FHIR
+ *  resource object for fetched/lookup results, a ResourceNode when resolving
+ *  a fragment-only reference (for example, "#id") within the current input
+ *  resource, or null when no resource can be resolved.
  */
 function requestResourceByUrl(ctx, node, refType, url, isCanonical) {
   let promiseOfResource = null;
