@@ -17,7 +17,7 @@
     "style-loader": "^3.3.2",
     "webpack": "^5.102.1",
     "webpack-cli": "^5.0.1",
-    "webpack-dev-server": "^5.2.2"
+    "webpack-dev-server": "^5.2.3"
   },
   "scripts": {
     "build": "webpack --mode production",

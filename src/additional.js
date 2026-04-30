@@ -121,8 +121,10 @@ const baseResourceTypes = {Resource: 1, DomainResource: 1};
  *  undefined or null.
  * @param {string} url - The URL of the resource to fetch.
  * @param {boolean} isCanonical - Indicates if the URL is a canonical URL.
- * @returns {Promise<Object|null>} A promise resolving to the resource object
- *  if found, or null.
+ * @returns {Promise<Object|ResourceNode|null>} Resolves to a plain FHIR
+ *  resource object for fetched/lookup results, a ResourceNode when resolving
+ *  a fragment-only reference (for example, "#id") within the current input
+ *  resource, or null when no resource can be resolved.
  */
 function requestResourceByUrl(ctx, node, refType, url, isCanonical) {
   let promiseOfResource = null;
@@ -159,7 +161,32 @@ function requestResourceByUrl(ctx, node, refType, url, isCanonical) {
       }
       promiseOfResource = util.fetchWithCache(urlJoin(fhirServerUrl, url), ctx);
     } else if (!url && fragment && node instanceof ResourceNode) {
-      promiseOfResource = Promise.resolve(node.getParentResource());
+      const parentResourceNode = node.getParentResource();
+      const parentResource = util.valData(parentResourceNode);
+      const containedResource = getContainedResource(parentResource, fragment);
+      if (!containedResource) {
+        return Promise.resolve(null);
+      }
+
+      const containedPath = parentResourceNode.path
+        ? parentResourceNode.path + '.contained'
+        : 'contained';
+      const containedIndex = parentResource?.contained?.indexOf(
+        containedResource
+      );
+
+      return Promise.resolve(
+        ResourceNode.makeResNode(
+          ctx,
+          containedResource,
+          parentResourceNode,
+          containedPath,
+          null,
+          null,
+          'contained',
+          containedIndex >= 0 ? containedIndex : null
+        )
+      );
     }
   }
 
@@ -227,10 +254,17 @@ engine.resolveFn = function (coll) {
     return acc;
   }, [])).then(result => {
     return result.reduce((acc, resItem) => {
-      if (resItem.status === 'fulfilled' && resItem.value?.resourceType) {
-        acc.push(ResourceNode.makeResNode(ctx, resItem.value, null, null, null,
-          null));
+      if (resItem.status !== 'fulfilled') {
+        return acc;
       }
+
+      const value = resItem.value;
+      if (value instanceof ResourceNode) {
+        acc.push(value);
+      } else if (value?.resourceType) {
+        acc.push(ResourceNode.makeResNode(ctx, value, null, null, null, null));
+      }
+
       return acc;
     }, []);
   });

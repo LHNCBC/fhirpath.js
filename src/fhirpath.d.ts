@@ -126,7 +126,7 @@ interface Path {
  */
 interface Model {
   /** Model version, e.g. 'r5', 'r4', 'stu3', or 'dstu2'. */
-  version: 'r5' | 'r4' | 'stu3' | 'dstu2',
+  version: 'r6' | 'r5' | 'r4' | 'stu3' | 'dstu2',
 
   /**
    * Settings for the `weight()` function.

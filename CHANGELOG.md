@@ -3,6 +3,29 @@
 This log documents significant changes for each release.  This project follows
 [Semantic Versioning](http://semver.org/).
 
+## [4.10.0] - 2026-04-21
+### Added
+- Added `sort()` support with optional multi-key sort arguments and
+  `asc`/`desc` direction controls, including async sort expressions.
+- Added variadic `coalesce(...)` with short-circuit evaluation for both
+  sync and async arguments.
+- Added `pathname([short])` for returning element paths within the input
+  resource.
+- Added string functions `lastIndexOf()`, `matchesFull()`, `escape()`, and
+  `unescape()`, and added optional flags support to `matches()`.
+- Added date/time component helpers: `yearOf()`, `monthOf()`, `dayOf()`,
+  `hourOf()`, `minuteOf()`, `secondOf()`, `millisecondOf()`,
+  `timezoneOffsetOf()`, `dateOf()`, and `timeOf()`.
+
+### Changed
+- Updated parser grammar and generated parser artifacts for the latest
+  FHIRPath syntax additions used by these features.
+- Updated the unit test scripts to call Jest via a Windows-compatible path.
+
+### Fixed
+- Fixed a rare error that occurred during unit tests when the time value was
+  missing milliseconds.
+
 ## [4.9.3] - 2026-03-31
 ### Changed
 - Updated package repository metadata in `package.json` to an explicit git

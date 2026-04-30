@@ -188,6 +188,25 @@ describe('evaluate', () => {
     expect(r[0].fullPropertyName()).toBe('QuestionnaireResponse.item[1]');
   });
 
+  it('should return [] for extension(url) when url is an empty string', () => {
+    const resource = {
+      resourceType: 'Patient',
+      extension: [
+        {
+          url: 'http://example.org/StructureDefinition/some-extension',
+          valueString: 'some value'
+        }
+      ]
+    };
+    const r = fhirpath.evaluate(
+      resource,
+      "Patient.extension('')",
+      null,
+      r4_model
+    );
+    expect(r).toStrictEqual([]);
+  });
+
   it('should serialize ResourceNode string values without double-encoding', () => {
     const r = fhirpath.evaluate(
       input.quantityExample,

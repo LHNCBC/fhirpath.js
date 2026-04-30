@@ -302,8 +302,8 @@ util.makeChildResNodes = function(ctx, parentResNode, childProperty, model) {
     // Add items to the end of the ResourceNode list when there are no
     // values at all, but there is a list of associated data, such as
     // extensions or ids.
-    return _toAdd.map((x) => ResourceNode.makeResNode(ctx, null, parentResNode,
-      childPath, x, fhirNodeDataType, childProperty));
+    return _toAdd.map((x, i) => ResourceNode.makeResNode(ctx, null,
+      parentResNode, childPath, x, fhirNodeDataType, childProperty, i));
   }
 
   return [ResourceNode.makeResNode(ctx, toAdd, parentResNode, childPath,

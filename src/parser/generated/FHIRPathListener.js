@@ -320,6 +320,15 @@ class FHIRPathListener extends antlr4.tree.ParseTreeListener {
 	}
 
 
+	// Enter a parse tree produced by FHIRPathParser#sortDirectionArgument.
+	enterSortDirectionArgument(ctx) {
+	}
+
+	// Exit a parse tree produced by FHIRPathParser#sortDirectionArgument.
+	exitSortDirectionArgument(ctx) {
+	}
+
+
 	// Enter a parse tree produced by FHIRPathParser#paramList.
 	enterParamList(ctx) {
 	}

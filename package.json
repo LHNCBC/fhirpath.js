@@ -1,6 +1,6 @@
 {
   "name": "fhirpath",
-  "version": "4.9.3",
+  "version": "4.10.0",
   "description": "A FHIRPath engine",
   "main": "src/fhirpath.js",
   "types": "src/fhirpath.d.ts",
@@ -52,8 +52,8 @@
     "preinstall": "node bin/install-demo.js",
     "generateParser": "cd src/parser; rimraf ./generated/*; java -Xmx500M -cp \"../../antlr-4.9.3-complete.jar:$CLASSPATH\" org.antlr.v4.Tool -o generated -Dlanguage=JavaScript FHIRPath.g4; node ../../scripts/fix-parser-imports.js",
     "build": "cd browser-build && webpack && rimraf fhirpath.zip && bestzip fhirpath.zip LICENSE.md fhirpath.min.js fhirpath.r5.min.js fhirpath.r4.min.js fhirpath.stu3.min.js fhirpath.dstu2.min.js && rimraf  LICENSE.md",
-    "test:unit": "node --use_strict node_modules/.bin/jest && TZ=America/New_York node --use_strict node_modules/.bin/jest && TZ=Europe/Paris node --use_strict node_modules/.bin/jest",
-    "test:unit:debug": "echo 'open chrome chrome://inspect/' && node --inspect node_modules/.bin/jest --runInBand",
+    "test:unit": "node --use_strict node_modules/jest/bin/jest.js && TZ=America/New_York node --use_strict node_modules/jest/bin/jest.js && TZ=Europe/Paris node --use_strict node_modules/jest/bin/jest.js",
+    "test:unit:debug": "echo 'open chrome chrome://inspect/' && node --inspect node_modules/jest/bin/jest.js --runInBand",
     "build:demo": "npm run build && cd demo && npm run build",
     "test:e2e": "npm run build:demo && cypress run",
     "test:tsd": "tsd",

@@ -5,6 +5,7 @@ src/scratch.js
 build
 .DS_Store
 .editorconfig
+.codex
 Makefile
 test/benchmark/prev-fhirpath
 test/benchmark/prev-src

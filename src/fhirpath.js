@@ -62,9 +62,12 @@ const Terminologies = require('./terminologies');
 const Factory = require('./factory');
 
 // * fn: handler
-// * arity: is index map with type signature
-//   if type is in array (like [Boolean]) - this means
-//   function accepts value of this type or empty value {}
+// * arity: map of params count to type signature (must be present for
+//   functions with params, even if they also use variadicArity)
+//   if type is in array (like [Boolean]) - this means function accepts
+//   value of this type or empty value {}
+// * variadicArity: optional fallback for variadic functions
+//   {min, type} means params count >= min and every param uses `type`
 // * nullable:  means propagate empty result, i.e. instead
 //   calling function if one of params is  empty return empty
 
@@ -87,6 +90,10 @@ engine.invocationTable = {
   where:        {fn: filtering.whereMacro, arity: {1: ["Expr"]}},
   extension:    {fn: filtering.extension, arity: {1: ["String"]}},
   select:       {fn: filtering.selectMacro, arity: {1: ["Expr"]}},
+  coalesce:     {fn: filtering.coalesce, arity: {1: ["ExprAtCurrent"]},
+    variadicArity: {min: 1, type: "ExprAtCurrent"}},
+  sort:         {fn: filtering.sort, arity: {0: []},
+    variadicArity: {min: 0, type: "SortArgument"}},
   aggregate:    {fn: aggregate.aggregateMacro, arity: {1: ["Expr"], 2: ["Expr", "AnyAtRoot"]}},
   sum:          {fn: aggregate.sumFn},
   min:          {fn: aggregate.minFn},
@@ -122,6 +129,7 @@ engine.invocationTable = {
   toQuantity:   {fn: misc.toQuantity, arity: {0: [], 1: ["String"]}},
   hasValue:     {fn: misc.hasValueFn},
   getValue:     {fn: misc.getValueFn},
+  pathname:     {fn: misc.pathnameFn, arity: {0: [], 1: ["Boolean"]}},
   convertsToBoolean:    {fn: misc.createConvertsToFn(misc.toBoolean, 'boolean')},
   convertsToInteger:    {fn: misc.createConvertsToFn(misc.toInteger, 'number')},
   convertsToLong:       {fn: misc.createConvertsToFn(misc.toLong, 'bigint')},
@@ -133,6 +141,7 @@ engine.invocationTable = {
   convertsToQuantity:   {fn: misc.createConvertsToFn(misc.toQuantity, FP_Quantity)},
 
   indexOf:        {fn: strings.indexOf,          arity: {1: ["String"]}},
+  lastIndexOf:    {fn: strings.lastIndexOf,      arity: {1: ["String"]}},
   substring:      {fn: strings.substring,        arity: {1: ["Integer"], 2: ["Integer","Integer"]}},
   startsWith:     {fn: strings.startsWith,       arity: {1: ["String"]}},
   endsWith:       {fn: strings.endsWith,         arity: {1: ["String"]}},
@@ -140,7 +149,8 @@ engine.invocationTable = {
   upper:          {fn: strings.upper},
   lower:          {fn: strings.lower},
   replace:        {fn: strings.replace,          arity: {2: ["String", "String"]}},
-  matches:        {fn: strings.matches,          arity: {1: ["String"]}},
+  matches:        {fn: strings.matches,          arity: {1: ["String"], 2: ["String", "String"]}},
+  matchesFull:    {fn: strings.matchesFull,      arity: {1: ["String"], 2: ["String", "String"]}},
   replaceMatches: {fn: strings.replaceMatches,   arity: {2: ["String", "String"]}},
   length:         {fn: strings.length },
   toChars:        {fn: strings.toChars },
@@ -150,6 +160,8 @@ engine.invocationTable = {
 
   encode:         {fn: strings.encodeFn,         arity: {1: ["String"]}},
   decode:         {fn: strings.decodeFn,         arity: {1: ["String"]}},
+  escape:         {fn: strings.escapeFn,         arity: {1: ["String"]}},
+  unescape:       {fn: strings.unescapeFn,       arity: {1: ["String"]}},
 
   abs:            {fn: math.abs},
   ceiling:        {fn: math.ceiling},
@@ -165,6 +177,16 @@ engine.invocationTable = {
   now:            {fn: datetime.now },
   today:          {fn: datetime.today },
   timeOfDay:      {fn: datetime.timeOfDay },
+  yearOf:         {fn: datetime.yearOf },
+  monthOf:        {fn: datetime.monthOf },
+  dayOf:          {fn: datetime.dayOf },
+  hourOf:         {fn: datetime.hourOf },
+  minuteOf:       {fn: datetime.minuteOf },
+  secondOf:       {fn: datetime.secondOf },
+  millisecondOf:  {fn: datetime.millisecondOf },
+  timezoneOffsetOf: {fn: datetime.timezoneOffsetOf },
+  dateOf:         {fn: datetime.dateOf },
+  timeOf:         {fn: datetime.timeOf },
 
   repeat:          {fn: filtering.repeatMacro, arity: {1: ["Expr"]}},
   children:        {fn: navigation.children },
@@ -589,6 +611,12 @@ engine.IndexerExpression = function(ctx, parentData, node) {
 };
 
 engine.Functn = function(ctx, parentData, node) {
+  // Handle special case for sort function, doesn't pre-evaluate parameters
+  if (getIdentifierVal(node.text) === 'sort') {
+    return ['sort', { children: node.children }];
+  }
+  
+  // Regular function: identifier + paramList
   return node.children.map(function(x) {
     return engine.doEval(ctx, parentData, x);
   });
@@ -626,21 +654,68 @@ function cloneCtx(ctx, $this) {
 
 
 /**
+ * Unwraps parser-level sort argument wrappers for non-sort handlers.
+ *
+ * The sort grammar now emits SortDirectionArgument nodes. These wrappers must
+ * only be interpreted when a function explicitly expects SortArgument (built-in
+ * sort). For user overrides (including replacing sort), argument typing should
+ * behave as documented and operate on the wrapped expression itself.
+ *
+ * @param {string|Array} type - The declared argument type.
+ * @param {Object} param - The AST node for the argument.
+ * @returns {Object} The normalized AST node.
+ */
+function normalizeSortParamNode(type, param) {
+  const baseType = Array.isArray(type) ? type[0] : type;
+  if (baseType === "SortArgument") {
+    return param;
+  }
+  if ((param?.type === "SortDirectionArgument" ||
+    param?.type === "SortArgument") && param?.children?.[0]) {
+    return param.children[0];
+  }
+  return param;
+}
+
+
+/**
  * Prepares and evaluates a parameter for FHIRPath function/operator invocation.
- * Returns the evaluated value, or a function for "Expr" type.
  *
  * @param {Object} ctx - The evaluation context.
  * @param {Array} parentData - The data from the parent node.
  * @param {string|Array} type - The expected type(s) of the parameter.
  * @param {Object} param - The AST node representing the parameter.
- * @returns {*} - The evaluated parameter value, or a function for "Expr" type.
+ * @returns {*} - The evaluated parameter value or a function if the parameter
+ *  type is "Expr" or similar.
  * @throws {Error} - If an Identifier type param is not a TermExpression.
  */
 function makeParam(ctx, parentData, type, param) {
+  param = normalizeSortParamNode(type, param);
+
   if(type === "Expr") {
     return function(data) {
       const $this = util.arraify(data);
       return engine.doEval(cloneCtx(ctx, $this), $this, param);
+    };
+  }
+
+  // The difference between Expr and ExprAtCurrent is that for ExprAtCurrent, we don't change the
+  // context $this when evaluating the parameter expression, while for Expr we set $this to the
+  // data passed in when evaluating the parameter expression.
+  // The coalesce function is currently the only function that works like this.
+  // It is really a late bound evaluation, and they are not evaluated before the function execution,
+  // the function is responsible for when they evaluated, as it will only evaluate parameters till it
+  // gets a non-empty value.
+  if(type === "ExprAtCurrent"){
+    return function(data) {
+      let ctxExpr = {...ctx};
+      if (ctx.definedVars) {
+        // Each parameter subexpression needs its own set of defined variables
+        // (cloned from the parent context). This way, the changes to the variables
+        // are isolated in the subexpression.
+        ctxExpr.definedVars = {...ctx.definedVars};
+      }
+      return engine.doEval(ctxExpr, util.arraify(data), param);
     };
   }
 
@@ -654,6 +729,25 @@ function makeParam(ctx, parentData, type, param) {
 
   if(type === "TypeSpecifier") {
     return engine.TypeSpecifier(ctx, parentData, param);
+  }
+
+  if(type === "SortArgument") {
+    // For sort arguments, we return the processed sort argument with expression and direction
+    const sortArg = engine.doEval(ctx, parentData, param);
+    return {
+      expr: function(data) {
+        let ctxExpr = {...ctx};
+        if (ctx.definedVars) {
+          ctxExpr.definedVars = {...ctx.definedVars};
+        }
+        // sort key selectors do not create an indexed iteration scope
+        ctxExpr.$index = undefined;
+        // Set up $this context for sort expression
+        ctxExpr.$this = data;
+        return engine.doEval(ctxExpr, util.arraify(data), sortArg.expr);
+      },
+      direction: sortArg.direction
+    };
   }
 
   const $this = ctx.$this || ctx.dataRoot;
@@ -678,6 +772,18 @@ function makeParam(ctx, parentData, type, param) {
     misc.singleton(res, type);
 }
 
+
+/**
+ * Invokes a FHIRPath function/operator from user or built-in invocation tables.
+ * Resolves parameters according to arity/type metadata and supports sync/async
+ * execution paths.
+ * @param {Object} ctx - Evaluation context.
+ * @param {string} fnName - Function/operator name to invoke.
+ * @param {Array} data - Current input collection passed as first argument.
+ * @param {Array|null} rawParams - Unevaluated AST parameter nodes.
+ * @returns {Array|Promise<Array>} Invocation result as an array, or a Promise
+ *   resolving to an array when any parameter/function execution is async.
+ */
 function doInvoke(ctx, fnName, data, rawParams){
   var invoc =
     ctx.userInvocationTable
@@ -696,7 +802,7 @@ function doInvoke(ctx, fnName, data, rawParams){
       }
     } else {
       var paramsNumber = rawParams ? rawParams.length : 0;
-      var argTypes = invoc.arity[paramsNumber];
+      var argTypes = getArgTypesForInvocation(invoc, paramsNumber);
       if(argTypes){
         var params = [];
         for(var i = 0; i < paramsNumber; i++){
@@ -727,6 +833,34 @@ function doInvoke(ctx, fnName, data, rawParams){
     throw new Error("Not implemented: " + fnName);
   }
 }
+
+
+/**
+ * Resolves argument type signatures for a function invocation by arity.
+ * Checks exact arity first, then falls back to variadicArity when present.
+ * @param {Object} invoc - Invocation descriptor from invocationTable.
+ * @param {number} paramsNumber - Number of parameters in the invocation.
+ * @returns {Array|null} Type signature for the given arity, or null if invalid.
+ */
+function getArgTypesForInvocation(invoc, paramsNumber) {
+  const argTypes = invoc.arity[paramsNumber];
+  if (argTypes) {
+    return argTypes;
+  }
+
+  if (!invoc.variadicArity) {
+    return null;
+  }
+
+  const min = invoc.variadicArity.min || 0;
+  if (paramsNumber < min) {
+    return null;
+  }
+
+  return Array(paramsNumber).fill(invoc.variadicArity.type);
+}
+
+
 function isNullable(x) {
   return x === null || x === undefined || util.isEmpty(x);
 }
@@ -819,6 +953,22 @@ engine.ParenthesizedTerm = function(ctx, parentData, node) {
   return engine.doEval(ctx, parentData, node.children[0]);
 };
 
+engine.SortDirectionArgument = function(ctx, parentData, node) {
+  const expr = node.children[0]; // The expression to sort by
+  // Use the direction captured by the parser, defaulting to 'asc'
+  const direction = node.direction || 'asc';
+  
+  return {
+    expr: expr, // Return the raw AST node for later processing
+    direction: direction
+  };
+};
+
+engine.SortArgument = function(ctx, parentData, node) {
+  // For compatibility with SortDirectionArgument 
+  return engine.SortDirectionArgument(ctx, parentData, node);
+};
+
 
 engine.evalTable = { // not every evaluator is listed if they are defined on engine
   BooleanLiteral: engine.BooleanLiteral,
@@ -850,7 +1000,9 @@ engine.evalTable = { // not every evaluator is listed if they are defined on eng
   OrExpression: engine.OpExpression,
   ImpliesExpression: engine.OpExpression,
   AndExpression: engine.OpExpression,
-  XorExpression: engine.OpExpression
+  XorExpression: engine.OpExpression,
+  SortDirectionArgument: engine.SortDirectionArgument,
+  SortArgument: engine.SortArgument
 };
 
 

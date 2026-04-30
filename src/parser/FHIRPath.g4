@@ -11,9 +11,10 @@ grammar FHIRPath;
 
 //prog: line (line)*;
 //line: ID ( '(' expr ')') ':' expr '\r'? '\n';
+
 entireExpression
-    : expression EOF
-    ;
+        : expression EOF
+        ;
 
 expression
         : term                                                      #termExpression
@@ -38,15 +39,17 @@ term
         | literal                                               #literalTerm
         | externalConstant                                      #externalConstantTerm
         | '(' expression ')'                                    #parenthesizedTerm
+// TODO: Add instance selector support
+//        | instanceSelector                                      #instanceSelectorTerm
         ;
 
 literal
         : '{' '}'                                               #nullLiteral
         | ('true' | 'false')                                    #booleanLiteral
         | STRING                                                #stringLiteral
-        | NUMBER                                                #numberLiteral
+        | (INTEGER | DECIMAL)                                   #numberLiteral
         | LONGNUMBER                                            #longNumberLiteral
-        | DATE                                                 #dateLiteral
+        | DATE                                                  #dateLiteral
         | DATETIME                                              #dateTimeLiteral
         | TIME                                                  #timeLiteral
         | quantity                                              #quantityLiteral
@@ -65,15 +68,32 @@ invocation                          // Terms that can be used after the function
         ;
 
 functn
-        : identifier '(' paramList? ')'
+        : ('sort' | '`sort`') '(' (sortArgument (',' sortArgument)*)? ')'
+        | identifier '(' paramList? ')'
+        ;
+
+sortArgument
+        : expression ('asc' | 'desc')?                          #sortDirectionArgument
         ;
 
 paramList
         : expression (',' expression)*
         ;
 
+// TODO: Add instance selector support
+/*
+// Instance selector (FHIRPath object construction syntax - same as in CQL)
+instanceSelector
+        : qualifiedIdentifier '{' (':' | (instanceElementSelector (',' instanceElementSelector)*)) '}'
+        ;
+
+instanceElementSelector
+        : identifier ':' expression
+        ;
+*/
+
 quantity
-        : NUMBER unit?
+        : (INTEGER | DECIMAL) unit?
         ;
 
 unit
@@ -105,6 +125,9 @@ identifier
         | 'contains'
         | 'in'
         | 'is'
+        | 'asc'
+        | 'desc'
+        | 'sort'
         ;
 
 
@@ -135,8 +158,7 @@ fragment DATEFORMAT
         ;
 
 fragment TIMEFORMAT
-        :
-            [0-9][0-9] (':'[0-9][0-9] (':'[0-9][0-9] ('.'[0-9]+)?)?)?
+        : [0-9][0-9] (':'[0-9][0-9] (':'[0-9][0-9] ('.'[0-9]+)?)?)?
         ;
 
 fragment TIMEZONEOFFSETFORMAT
@@ -156,12 +178,16 @@ STRING
         ;
 
 // Also allows leading zeroes now (just like CQL and XSD)
-NUMBER
-        : [0-9]+('.' [0-9]+)?
+INTEGER
+        : [0-9]+
+        ;
+
+DECIMAL
+        : [0-9]+ '.' [0-9]+
         ;
 
 LONGNUMBER
-        : [0-9]+ 'L'?
+        : [0-9]+ 'L'
         ;
 
 // Pipe whitespace to the HIDDEN channel to support retrieving source text through the parser.
@@ -178,7 +204,7 @@ LINE_COMMENT
         ;
 
 fragment ESC
-        : '\\' ([`'\\/fnrt] | UNICODE)    // allow \`, \', \\, \/, \f, etc. and \uXXX
+        : '\\' ([`"'\\/fnrt] | UNICODE)    // allow \`, \", \', \\, \/, \f, etc. and \uXXX
         ;
 
 fragment UNICODE
@@ -188,5 +214,3 @@ fragment UNICODE
 fragment HEX
         : [0-9a-fA-F]
         ;
-
-
