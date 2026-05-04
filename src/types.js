@@ -1205,7 +1205,8 @@ FP_Quantity.toUcumQuantity = function (value, unit) {
 
 /**
  * Wrapper for ucumUtils.convertUnitTo that accepts FP_Decimal values.
- * Converts a quantity from one unit to another, preserving decimal precision.
+ * Converts a quantity from one unit to another, preserving decimal precision if
+ * possible.
  *
  * @param {string} fromUnitCode - The source unit code.
  * @param {FP_Decimal} fromVal - The value to convert (can be FP_Decimal or number).
@@ -1217,6 +1218,16 @@ function ucumConvertUnitTo(fromUnitCode, fromVal, toUnitCode) {
   const result = ucumUtils.convertUnitTo(fromUnitCode, 1, toUnitCode);
 
   if (result.status === 'succeeded') {
+    // If either unit is special, we cannot rely on the magnitude-based
+    // conversion and should use the conversion result as is.
+    if (result.fromUnit.isSpecial_ || result.toUnit.isSpecial_) {
+      const specialConversionResult = ucumUtils.convertUnitTo(
+        fromUnitCode, fromVal.toNumber(), toUnitCode);
+      return {
+        ...specialConversionResult,
+        toVal: fromVal.constructor.getDecimal(specialConversionResult.toVal)
+      };
+    }
     return {
       ...result,
       toVal: fromVal.mul(result.fromUnit.magnitude_).div(result.toUnit.magnitude_)

@@ -563,6 +563,18 @@ tests:
       - expression: 30 days ~ 1 'mo'
         result: [true]
 
+      - expression: 23 'Cel' ~ 73.4 '[degF]'
+        result: [true]
+
+      - expression: 73.4 '[degF]' ~ 23 'Cel'
+        result: [true]
+
+      - expression: 0 'Cel' ~ 273.15 'K'
+        result: [true]
+
+      - expression: 23 'Cel' !~ 74 '[degF]'
+        result: [true]
+
       - expression: 4 'g' !~ 4040 'mg'
         result: [true]
 
@@ -994,4 +1006,3 @@ subject:
       c: str
     d:
       - e: 2
-

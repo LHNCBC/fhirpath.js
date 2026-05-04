@@ -3,6 +3,12 @@
 This log documents significant changes for each release.  This project follows
 [Semantic Versioning](http://semver.org/).
 
+## [4.10.1] - 2026-05-04
+### Fixed
+- Fixed UCUM conversion handling for special units (`Cel`, `[degF]`, `K`) to
+  use direct conversion values from `ucum-lhc`, as the current implementation in
+  `fhirpath.js` is unable to correctly process these special units.
+
 ## [4.10.0] - 2026-04-21
 ### Added
 - Added `sort()` support with optional multi-key sort arguments and
