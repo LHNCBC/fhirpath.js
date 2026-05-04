@@ -1215,17 +1215,15 @@ FP_Quantity.toUcumQuantity = function (value, unit) {
  *   or the original ucumUtils result if conversion failed.
  */
 function ucumConvertUnitTo(fromUnitCode, fromVal, toUnitCode) {
-  const result = ucumUtils.convertUnitTo(fromUnitCode, 1, toUnitCode);
+  const result = ucumUtils.convertUnitTo(fromUnitCode, fromVal.toNumber(), toUnitCode);
 
   if (result.status === 'succeeded') {
     // If either unit is special, we cannot rely on the magnitude-based
     // conversion and should use the conversion result as is.
     if (result.fromUnit.isSpecial_ || result.toUnit.isSpecial_) {
-      const specialConversionResult = ucumUtils.convertUnitTo(
-        fromUnitCode, fromVal.toNumber(), toUnitCode);
       return {
-        ...specialConversionResult,
-        toVal: fromVal.constructor.getDecimal(specialConversionResult.toVal)
+        ...result,
+        toVal: fromVal.constructor.getDecimal(result.toVal)
       };
     }
     return {
