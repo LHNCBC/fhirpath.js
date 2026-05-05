@@ -179,6 +179,14 @@ tests:
       result: [true]
     - expression: 1001 'g' < 1 'kg'
       result: [false]
+    - expression: 23 'Cel' > 72 '[degF]'
+      result: [true]
+    - expression: 23 'Cel' < 72 '[degF]'
+      result: [false]
+    - expression: 0 'Cel' >= 273.15 'K'
+      result: [true]
+    - expression: 0 'Cel' <= 273.15 'K'
+      result: [true]
     - expression: 2 '1' > 1
       result: [true]
     - expression: 2 > 1 '1'

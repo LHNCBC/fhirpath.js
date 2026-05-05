@@ -435,6 +435,21 @@ tests:
       expression: "'1 \\'cm\\''.toQuantity('mm').value = 10"
       result:
         - true
+    - desc: '** UCUM special units'
+      inputfile: patient-example.json
+      expression: "'23 \\'Cel\\''.toQuantity('[degF]') ~ 73.4 '[degF]'"
+      result:
+        - true
+    - desc: '** UCUM special units'
+      inputfile: patient-example.json
+      expression: "'73.4 \\'[degF]\\''.toQuantity('Cel') ~ 23 'Cel'"
+      result:
+        - true
+    - desc: '** UCUM special units'
+      inputfile: patient-example.json
+      expression: "'0 \\'Cel\\''.toQuantity('K') = 273.15 'K'"
+      result:
+        - true
     - desc: '** Invalid conversion'
       inputfile: patient-example.json
       expression: "'1 \\'cm\\''.toQuantity('g')"
